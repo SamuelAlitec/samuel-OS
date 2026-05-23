@@ -604,16 +604,25 @@ Escreve 3-4 frases. Começa diretamente com o que é mais urgente. Sem saudaçõ
 
 function speakBriefing(){
   if(!briefingText) return;
-  speechSynth.cancel();
-  const u = new SpeechSynthesisUtterance(briefingText);
-  u.lang='pt-PT'; u.rate=0.95; u.pitch=1;
-  const voices = speechSynth.getVoices();
-  const pt = voices.find(v=>v.lang.startsWith('pt'));
-  if(pt) u.voice=pt;
-  speechSynth.speak(u);
-  $('btn-speak').textContent='⏹ Parar';
-  u.onend = ()=>{ $('btn-speak').textContent='🔊 Ouvir'; };
-  u.onerror = ()=>{ $('btn-speak').textContent='🔊 Ouvir'; };
+  // iOS requires voices to be loaded - trigger on user gesture
+  if(speechSynth.speaking){ speechSynth.cancel(); $('btn-speak').textContent='🔊 Ouvir'; return; }
+  const speak = ()=>{
+    const u = new SpeechSynthesisUtterance(briefingText);
+    u.lang='pt-PT'; u.rate=0.9; u.pitch=1;
+    // iOS fix: get voices after user gesture
+    const voices = speechSynth.getVoices();
+    const pt = voices.find(v=>v.lang.startsWith('pt-PT'))||voices.find(v=>v.lang.startsWith('pt'))||null;
+    if(pt) u.voice=pt;
+    speechSynth.speak(u);
+    $('btn-speak').textContent='⏹ Parar';
+    u.onend=u.onerror=()=>{ $('btn-speak').textContent='🔊 Ouvir'; };
+  };
+  // iOS: voices may not be loaded yet
+  if(speechSynth.getVoices().length===0){
+    speechSynth.addEventListener('voiceschanged',speak,{once:true});
+    // fallback if voiceschanged never fires (some iOS versions)
+    setTimeout(()=>{ if(!speechSynth.speaking) speak(); },300);
+  } else { speak(); }
 }
 
 // ─── VOICE INPUT ──────────────────────────────────────────────────────────────
