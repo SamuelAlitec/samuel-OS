@@ -556,7 +556,7 @@ function goPage(name, el){
 function setGreeting(){
   const now = new Date();
   const h = now.getHours();
-  const g = h<12?'Bom dia':'h<18?Boa tarde':'Boa noite';
+  
   const greet = h<12?'Bom dia, Samuel':h<19?'Boa tarde, Samuel':'Boa noite, Samuel';
   $('greeting').textContent = greet;
   const days = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
