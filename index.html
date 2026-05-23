@@ -51,8 +51,8 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .page.active{display:block;}
 /* BOTTOM NAV mobile */
 .bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(242,242,247,.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--sep);padding:8px 0 calc(8px + var(--safe-bot));z-index:100;}
-.bottom-nav-items{display:flex;justify-content:space-around;}
-.bn-item{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--text3);cursor:pointer;padding:4px 12px;border:none;background:none;font-family:inherit;min-width:60px;position:relative;}
+.bottom-nav-items{display:flex;justify-content:space-around;overflow-x:auto;}
+.bn-item{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--text3);cursor:pointer;padding:4px 8px;border:none;background:none;font-family:inherit;min-width:52px;position:relative;}
 .bn-item.active{color:var(--blue);}
 .bn-item svg{width:22px;height:22px;}
 .bn-dot{position:absolute;top:4px;right:10px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--bg);}
@@ -364,13 +364,17 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zm-8-4H8L6 7h12l-2-4z"/></svg>
           Produtos
         </button>
+        <button class="bn-item" onclick="openSettings()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          Config
+        </button>
       </div>
     </nav>
   </div>
 </div>
 
 <!-- FAB -->
-<button class="fab" onclick="goPage('home'); setTimeout(()=>document.getElementById('capture-input').focus(),300);" id="fab" style="display:none;">
+<button class="fab" onclick="fabAction()" id="fab" style="display:none;">
   <svg width="22" height="22" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
 </button>
 
@@ -472,12 +476,13 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
       <button class="modal-close" onclick="closeModal('modal-add-tarefa')">✕</button>
     </div>
     <div style="padding:0 20px 20px;">
+      <div class="form-field"><label class="form-label">Frente</label><select class="form-select" id="nt-frente"></select></div>
       <div class="form-field"><label class="form-label">Tarefa</label><textarea class="form-textarea" id="nt-texto" placeholder="o que tens de fazer..."></textarea></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="form-field"><label class="form-label">Prioridade</label><select class="form-select" id="nt-prio"><option value="normal">Normal</option><option value="alta">Alta</option></select></div>
         <div class="form-field"><label class="form-label">Data limite</label><input type="date" class="form-input" id="nt-data"></div>
       </div>
-      <button class="btn btn-primary" style="width:100%;" onclick="addTarefa()">Adicionar</button>
+      <button class="btn btn-primary" style="width:100%;" onclick="addTarefaGlobal()">Adicionar</button>
     </div>
   </div>
 </div>
@@ -539,7 +544,15 @@ function daysSince(d){ if(!d)return null; const t=new Date();t.setHours(0,0,0,0)
 function $(id){ return document.getElementById(id); }
 
 // ─── NAVIGATION ──────────────────────────────────────────────────────────────
-const pageTitles = {home:'Home',pipeline:'Pipeline',frentes:'Frentes',produtos:'Produtos'};
+const pageTitles = {home:'Home',pipeline:'Pipeline',frentes:'Frentes',produtos:'Produtos',settings:'Definições'};
+function fabAction(){
+  const active = document.querySelector('.page.active');
+  if(!active) return;
+  const id = active.id;
+  if(id==='page-pipeline') openModal('modal-add-lead');
+  else if(id==='page-frentes') openAddTarefa(frentes[0]?.id||null);
+  else if(id==='page-produtos') { /* future */ }
+}
 function goPage(name, el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item,.bn-item').forEach(b=>b.classList.remove('active'));
@@ -547,9 +560,10 @@ function goPage(name, el){
   document.querySelectorAll(`[data-page="${name}"]`).forEach(b=>b.classList.add('active'));
   $('mobile-title').textContent = pageTitles[name]||name;
   $('fab').style.display = name==='home' ? 'none' : 'flex';
-  if(name==='pipeline') loadLeads();
-  if(name==='frentes') loadFrente();
-  if(name==='produtos') loadProdutos();
+  if(name==='pipeline'){ loadLeads(); $('fab').style.display='flex'; }
+  else if(name==='frentes'){ loadFrente(); $('fab').style.display='flex'; }
+  else if(name==='produtos'){ loadProdutos(); $('fab').style.display='flex'; }
+  else { $('fab').style.display='none'; }
 }
 
 // ─── GREETING ─────────────────────────────────────────────────────────────────
@@ -921,7 +935,13 @@ async function refineEmail(){
   }catch(e){alert('Erro: '+e.message);}
 }
 
-function copyEmail(){ $('email-result').select(); document.execCommand('copy'); }
+function copyEmail(){
+  const txt=$('email-result').value;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(()=>{ const b=document.getElementById('btn-gen-email'); })
+    .catch(()=>{ $('email-result').select(); document.execCommand('copy'); });
+  } else { $('email-result').select(); document.execCommand('copy'); }
+}
 
 // ─── FRENTES ──────────────────────────────────────────────────────────────────
 async function loadFrente(){
@@ -977,7 +997,7 @@ async function loadFrenteTarefas(){
   const fechadas=(data||[]).filter(t=>t.estado!=='aberta');
   $('ftab-tarefas').innerHTML=`
   <div style="padding:4px 20px 16px;">
-    <button onclick="openModal('modal-add-tarefa')" class="btn btn-secondary btn-sm" style="margin-bottom:12px;width:100%;">+ Nova tarefa</button>
+    <button onclick="openAddTarefa(currentFrente?.id)" class="btn btn-secondary btn-sm" style="margin-bottom:12px;width:100%;">+ Nova tarefa</button>
     ${abertas.map(t=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--sep);">
       <button onclick="closeTarefa(${t.id})" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--sep);background:none;cursor:pointer;flex-shrink:0;margin-top:1px;"></button>
       <div style="flex:1;">
@@ -1078,9 +1098,13 @@ async function saveSettings(){
     {key:'briefing_weekday',value:$('s-briefing-week').value},
     {key:'briefing_saturday',value:$('s-briefing-sat').value},
     {key:'briefing_sunday',value:$('s-briefing-sun').value},
+    {key:'anthropic_key',value:apiKey},
   ],{onConflict:'key'});
   closeModal('modal-settings');
   if(apiKey) loadBriefing();
+  // Show confirmation
+  const btn = document.querySelector('[onclick="saveSettings()"]');
+  if(btn){ const orig=btn.textContent; btn.textContent='✓ Guardado'; setTimeout(()=>btn.textContent=orig,2000); }
 }
 
 async function loadSettings(){
@@ -1089,6 +1113,11 @@ async function loadSettings(){
   if(m.briefing_weekday) $('s-briefing-week').value=m.briefing_weekday;
   if(m.briefing_saturday) $('s-briefing-sat').value=m.briefing_saturday;
   if(m.briefing_sunday) $('s-briefing-sun').value=m.briefing_sunday;
+  // Load API key from DB if not in localStorage
+  if(!apiKey && m.anthropic_key) {
+    apiKey = m.anthropic_key;
+    localStorage.setItem('alitec-apikey', apiKey);
+  }
 }
 
 // ─── PWA ──────────────────────────────────────────────────────────────────────
@@ -1100,11 +1129,9 @@ if('serviceWorker' in navigator){
 async function init(){
   apiKey=localStorage.getItem('alitec-apikey')||'';
   setGreeting();
-  await loadSettings();
-  await loadLeads();
-  await loadFrente();
-  await loadBriefing();
-  // FAB visible on non-home pages
+  await loadSettings(); // may update apiKey from Supabase
+  await Promise.all([loadLeads(), loadFrente()]);
+  await loadBriefing(); // called after loadSettings so apiKey is fresh
   $('fab').style.display='none';
 }
 init();
