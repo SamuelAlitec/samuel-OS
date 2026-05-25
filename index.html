@@ -241,6 +241,25 @@ html,body{
   animation:shimmer 1.8s infinite;
 }
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.briefing-top{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;
+}
+.briefing-stats{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  position:relative;z-index:1;
+}
+.bstat{
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:10px;padding:10px 12px;
+  display:flex;align-items:center;gap:10px;
+}
+.bstat-icon{font-size:18px;flex-shrink:0;line-height:1;}
+.bstat-val{font-size:20px;font-weight:700;color:#fff;line-height:1;letter-spacing:-.02em;}
+.bstat-label{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px;font-weight:500;}
+.bstat.warn .bstat-val{color:#FF8A80;}
+.bstat.ok .bstat-val{color:#80E8A0;}
 .briefing-footer{
   display:flex;align-items:center;justify-content:flex-end;
   margin-top:14px;position:relative;z-index:1;
@@ -554,15 +573,15 @@ html,body{
         </div>
 
         <div class="briefing-card" id="briefing-card">
-          <div class="briefing-label">Briefing do dia</div>
-          <div class="briefing-skeleton" id="briefing-skeleton"></div>
-          <div class="briefing-text" id="briefing-text" style="display:none;"></div>
-          <div class="briefing-footer" id="briefing-footer" style="display:none;">
-            <button class="btn-speak" id="btn-speak" onclick="speakBriefing()">
+          <div class="briefing-top">
+            <div class="briefing-label">Hoje</div>
+            <button class="btn-speak" id="btn-speak" onclick="speakBriefing()" style="display:none;">
               <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
-              Ouvir
+              Ouvir briefing
             </button>
           </div>
+          <div class="briefing-skeleton" id="briefing-skeleton"></div>
+          <div class="briefing-stats" id="briefing-stats" style="display:none;"></div>
         </div>
 
         <div class="capture-wrap">
@@ -869,8 +888,8 @@ function setGreeting(){
 async function loadBriefing(){
   if(!apiKey){
     $('briefing-skeleton').style.display='none';
-    $('briefing-text').style.display='block';
-    $('briefing-text').textContent='Configura a API key nas Definicoes para activar o briefing.';
+    var s=$('briefing-stats');s.style.display='grid';
+    s.innerHTML='<div class="bstat" style="grid-column:span 2;"><div class="bstat-label" style="font-size:13px;color:rgba(255,255,255,.5);">Configura a API key nas Definicoes para activar o briefing.</div></div>';
     return;
   }
   try{
@@ -887,7 +906,7 @@ async function loadBriefing(){
     prompt+='Follow-ups hoje ('+todayL.length+'): '+todayL.slice(0,5).map(function(l){return l.company;}).join(', ')+(todayL.length?'':'nenhum')+'.\n';
     prompt+='Sem contacto +14d ('+inactive.length+'): '+inactive.slice(0,3).map(function(l){return l.company;}).join(', ')+(inactive.length?'':'nenhum')+'.\n';
     prompt+='Tarefas urgentes: '+tarefas.slice(0,5).map(function(t){return (t.frentes?t.frentes.nome:'?')+': '+t.texto;}).join(' | ')+(tarefas.length?'':'nenhuma')+'.\n';
-    prompt+='Escreve 3-4 frases directas. Sem saudacoes. Sem "Ola Samuel". Portugues europeu.';
+    prompt+='Maximo 2 frases curtas. So o mais urgente. Sem introducao. Portugues europeu.';
     var res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -897,9 +916,32 @@ async function loadBriefing(){
     briefingText=data.content&&data.content[0]?data.content[0].text:'Erro ao gerar briefing.';
   } catch(e){ briefingText='Nao foi possivel gerar o briefing. Verifica a API key.'; }
   $('briefing-skeleton').style.display='none';
-  $('briefing-text').style.display='block';
-  $('briefing-text').textContent=briefingText;
-  $('briefing-footer').style.display='flex';
+  $('btn-speak').style.display='flex';
+  renderBriefingStats();
+}
+
+function renderBriefingStats(){
+  var active=leads.filter(function(l){return l.stage!=='ganho'&&l.stage!=='perdido';});
+  var overdue=active.filter(function(l){return l.followup&&daysDiff(l.followup)<0;}).length;
+  var todayL=active.filter(function(l){return l.followup===today();}).length;
+  var inactive=active.filter(function(l){var d=daysSince(l.last_interaction||(l.created_at&&l.created_at.split('T')[0]));return d!==null&&d>=14;}).length;
+  // count open high priority tasks
+  db.from('tarefas').select('id',{count:'exact'}).eq('estado','aberta').then(function(r){
+    var tarefas=r.count||0;
+    var stats=[
+      {icon:'⚠️',val:overdue,label:'em atraso',warn:overdue>0},
+      {icon:'📅',val:todayL,label:'para hoje',ok:todayL>0},
+      {icon:'💤',val:inactive,label:'sem contacto',warn:inactive>0},
+      {icon:'📋',val:tarefas,label:'tarefas abertas',warn:tarefas>0}
+    ];
+    var html='';
+    stats.forEach(function(s){
+      var cls=s.warn?'bstat warn':s.ok?'bstat ok':'bstat';
+      html+='<div class="'+cls+'"><div class="bstat-icon">'+s.icon+'</div><div><div class="bstat-val">'+s.val+'</div><div class="bstat-label">'+s.label+'</div></div></div>';
+    });
+    var el=$('briefing-stats');
+    if(el){el.innerHTML=html;el.style.display='grid';}
+  });
 }
 
 function speakBriefing(){
