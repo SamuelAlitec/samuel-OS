@@ -437,19 +437,6 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
         </div>
       </div>
 
-      <!-- BRIEFING -->
-      <div style="padding:12px 16px 4px;">
-        <div style="background:var(--text);border-radius:var(--r-xl);padding:18px 20px;position:relative;overflow:hidden;">
-          <div style="position:absolute;top:-40px;right:-40px;width:120px;height:120px;border-radius:50%;background:var(--red);opacity:.12;pointer-events:none;"></div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-            <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);">Hoje</span>
-            <button id="btn-speak" onclick="speakBriefing()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.8);border-radius:99px;padding:5px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font);display:none;">🔊 Ouvir</button>
-          </div>
-          <div id="briefing-skeleton" style="height:48px;border-radius:var(--r);background:linear-gradient(90deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.1) 50%,rgba(255,255,255,.04) 100%);background-size:200% 100%;animation:shimmer 1.8s infinite;"></div>
-          <div id="briefing-text" style="display:none;font-size:14px;line-height:1.65;color:rgba(255,255,255,.88);"></div>
-        </div>
-      </div>
-
       <!-- STATS -->
       <div class="stats-grid">
         <div class="stat-card stat-warn" onclick="goPageFilter('overdue')">
