@@ -89,7 +89,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 
 /* ── BOTTOM NAV ── */
 .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); z-index: 100; }
-.bn-items { display: flex; justify-content: space-around; align-items: center; padding: 10px 0 10px; }
+.bn-items { display: flex; justify-content: space-around; align-items: center; padding: 12px 0 6px; }
 
 .bn-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 9px; font-weight: 500; color: var(--text4); cursor: pointer; padding: 6px 12px 4px; border: none; background: none; font-family: var(--font); position: relative; transition: color .2s; letter-spacing: -.01em; }
 .bn-item svg { width: 22px; height: 22px; transition: transform .28s var(--spring); }
@@ -903,9 +903,9 @@ function stopWave(){
 
 // ── VOICE CAPTURE UI ────────────────────────────────────────────────────────
 var _voiceListening = false;
-var _mediaRecorder = null;
-var _audioChunks = [];
+var _recognition = null;
 var _audioCtx = null;
+var _lastTranscript = '';
 
 function getAudioCtx(){
   if(!_audioCtx) _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
@@ -916,8 +916,17 @@ function getAudioCtx(){
 function startVoice(e){
   if(e){ e.preventDefault(); e.stopPropagation(); }
   if(_voiceListening) return;
-  getAudioCtx();
+  getAudioCtx(); // init on user gesture for TTS later
+  
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    setTranscript('Reconhecimento de voz não disponível neste browser.', false);
+    return;
+  }
+  
   _voiceListening = true;
+  _lastTranscript = '';
+  
   var btn=document.getElementById('mic-btn');
   var ring=document.getElementById('mic-ring');
   var label=document.getElementById('mic-label');
@@ -929,45 +938,49 @@ function startVoice(e){
   setTranscript('A ouvir...', false);
   startWave();
 
-  // Try MediaRecorder first, fallback to SpeechRecognition
-  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
-    _audioChunks = [];
-    // iOS Safari supports audio/mp4, not audio/webm
-    var mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' :
-                   MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
-    var opts = mimeType ? {mimeType: mimeType} : {};
-    try {
-      _mediaRecorder = new MediaRecorder(stream, opts);
-    } catch(err) {
-      _mediaRecorder = new MediaRecorder(stream);
-    }
-    _mediaRecorder.ondataavailable = function(ev){ if(ev.data && ev.data.size>0) _audioChunks.push(ev.data); };
-    _mediaRecorder.onstop = function(){ stream.getTracks().forEach(function(t){t.stop();}); processVoiceInput(); };
-    _mediaRecorder.start(250); // collect data every 250ms
-  }).catch(function(err){
-    console.log('MediaRecorder failed:', err);
-    useSpeechRecognition();
-  });
-}
+  _recognition = new SR();
+  _recognition.lang = 'pt-PT';
+  _recognition.continuous = true;
+  _recognition.interimResults = true;
+  _recognition.maxAlternatives = 1;
 
-function useSpeechRecognition(){
-  var SR = window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ setTranscript('Microfone não disponível.', false); stopVoiceUI(); return; }
-  var rec = new SR();
-  rec.lang='pt-PT'; rec.continuous=false; rec.interimResults=true;
-  rec.onresult = function(e){
-    var txt = Array.from(e.results).map(function(r){return r[0].transcript;}).join('');
-    setTranscript('"'+txt+'"', true);
+  _recognition.onresult = function(e){
+    var interim = '';
+    var final = '';
+    for(var i = e.resultIndex; i < e.results.length; i++){
+      if(e.results[i].isFinal){
+        final += e.results[i][0].transcript;
+      } else {
+        interim += e.results[i][0].transcript;
+      }
+    }
+    var txt = (final || interim).trim();
+    if(txt){
+      _lastTranscript = final || _lastTranscript;
+      setTranscript('"' + txt + '"', true);
+    }
   };
-  rec.onend = function(){
+
+  _recognition.onerror = function(ev){
+    console.log('SR error:', ev.error);
+    if(ev.error === 'no-speech') return; // ignore
     stopVoiceUI();
-    var el=document.getElementById('voice-transcript');
-    var txt = el ? el.dataset.text : '';
-    if(txt) submitCapture(txt);
+    _voiceListening = false;
+    setTranscript('Pressiona e fala', false);
   };
-  rec.onerror = function(){ stopVoiceUI(); setTranscript('Pressiona e fala', false); };
-  rec.start();
-  _mediaRecorder = {stop:function(){try{rec.stop();}catch(e){}}, _isSR:true};
+
+  _recognition.onend = function(){
+    // Only process if we stopped intentionally
+    if(!_voiceListening) return;
+  };
+
+  try {
+    _recognition.start();
+  } catch(err) {
+    console.log('SR start error:', err);
+    stopVoiceUI();
+    _voiceListening = false;
+  }
 }
 
 function stopVoice(e){
@@ -975,10 +988,23 @@ function stopVoice(e){
   if(!_voiceListening) return;
   _voiceListening = false;
   stopVoiceUI();
-  if(_mediaRecorder && !_mediaRecorder._isSR && _mediaRecorder.state !== 'inactive'){
-    _mediaRecorder.stop();
-  } else if(_mediaRecorder && _mediaRecorder._isSR){
-    _mediaRecorder.stop();
+  
+  if(_recognition){
+    try { _recognition.stop(); } catch(err){}
+    _recognition = null;
+  }
+  
+  // Process what we captured
+  var el = document.getElementById('voice-transcript');
+  var txt = el ? (el.dataset.text || _lastTranscript) : _lastTranscript;
+  txt = txt.trim();
+  
+  if(txt){
+    setTranscript('"' + txt + '"', true);
+    submitCapture(txt);
+  } else {
+    setTranscript('Não captei nada. Tenta de novo.', false);
+    setTimeout(function(){ setTranscript('Pressiona e fala', false); }, 2000);
   }
 }
 
@@ -994,59 +1020,19 @@ function stopVoiceUI(){
   stopWave();
 }
 
-async function processVoiceInput(){
-  setTranscript('A processar...', false);
-  if(!openaiKey){
-    setTranscript('Configura a OpenAI key nas Definições.', false);
-    return;
-  }
-  if(!_audioChunks.length){
-    // No audio captured, try speech recognition fallback
-    useSpeechRecognition();
-    return;
-  }
-  var mimeType = _audioChunks[0] && _audioChunks[0].type ? _audioChunks[0].type : 'audio/webm';
-  var ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-  var blob = new Blob(_audioChunks, {type: mimeType});
-  var form = new FormData();
-  form.append('file', blob, 'audio.'+ext);
-  form.append('model', 'whisper-1');
-  form.append('language', 'pt');
-  form.append('prompt', 'Alitec, Frutta Nature, BidFood, Makro, Aviludo, Continente, Ruslan, PRR, INOVFRUTTA, Vitafoods');
-  try{
-    var res = await fetch('https://api.openai.com/v1/audio/transcriptions',{
-      method:'POST',
-      headers:{'Authorization':'Bearer '+openaiKey},
-      body:form
-    });
-    var d = await res.json();
-    if(d.text && d.text.trim()){
-      var txt = d.text.trim();
-      setTranscript('"'+txt+'"', true);
-      submitCapture(txt);
-    } else {
-      setTranscript('Não percebi. Tenta de novo.', false);
-    }
-  }catch(err){
-    console.error('Whisper error:', err);
-    setTranscript('Erro ao processar. Tenta de novo.', false);
-  }
-}
-
 function submitCapture(txt){
-  // Adds to chat and runs through AI
   addChatBubble('user', txt);
-  var ci=document.getElementById('capture-input');
+  var ci = document.getElementById('capture-input');
   if(ci) ci.value = txt;
   setTimeout(function(){ runCapture(); }, 50);
 }
 
 function setTranscript(text, hasText){
-  var el=document.getElementById('voice-transcript');
+  var el = document.getElementById('voice-transcript');
   if(!el) return;
   el.textContent = text;
   el.dataset.text = hasText ? text.replace(/^"|"$/g,'') : '';
-  el.classList.toggle('has-text', hasText);
+  el.classList.toggle('has-text', !!hasText);
 }
 
 
