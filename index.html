@@ -89,7 +89,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 
 /* ── BOTTOM NAV ── */
 .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); z-index: 100; }
-.bn-items { display: flex; justify-content: space-around; align-items: center; padding: 8px 0 14px; }
+.bn-items { display: flex; justify-content: space-around; align-items: center; padding: 10px 0 10px; }
 
 .bn-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 9px; font-weight: 500; color: var(--text4); cursor: pointer; padding: 6px 12px 4px; border: none; background: none; font-family: var(--font); position: relative; transition: color .2s; letter-spacing: -.01em; }
 .bn-item svg { width: 22px; height: 22px; transition: transform .28s var(--spring); }
@@ -856,8 +856,8 @@ async function speakBriefing(){
   if(overdue===0&&todayL===0&&inactive===0) spokenText+='Tudo em dia. Boa semana.';
   btn.textContent='A falar...';
   if(openaiKey){
-    btn.textContent='A falar...';
-    await speakText(spokenText,function(){btn.textContent='Ouvir briefing';});
+    if(btn){btn.textContent='🔊 A falar...';}
+    await speakText(spokenText,function(){ if(btn){btn.textContent='🔊 Ouvir';btn.disabled=false;} });
   } else {
     var synth=window.speechSynthesis;
     if(synth.speaking){synth.cancel();btn.textContent='Ouvir briefing';return;}
@@ -998,7 +998,9 @@ async function processVoiceInput(){
       if(d.text && d.text.trim()){
         var txt = d.text.trim();
         setTranscript('"'+txt+'"', true);
-        runCaptureText(txt); // don't await — respond immediately
+        var ci=document.getElementById('capture-input');
+        if(ci) ci.value=txt;
+        runCapture();
       } else {
         setTranscript('Não percebi. Tenta de novo.', false);
       }
@@ -1066,8 +1068,12 @@ async function speakBriefing(){
 function sendText(){
   var el=document.getElementById('capture-text');
   if(!el||!el.value.trim()) return;
-  runCaptureText(el.value.trim());
+  var txt=el.value.trim();
   el.value=''; el.style.height='40px';
+  // Set value in capture-input and trigger runCapture
+  var ci=document.getElementById('capture-input');
+  if(ci) ci.value=txt;
+  runCapture();
 }
 // ─── CONVERSATIONAL CAPTURE ──────────────────────────────────────────────────
 var captureConvHistory = [];
