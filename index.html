@@ -477,8 +477,8 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
           <div class="mic-wrap">
             <div class="mic-ring" id="mic-ring"></div>
             <button class="mic-btn" id="mic-btn"
-              onmousedown="startVoice()" onmouseup="stopVoice()"
-              ontouchstart="startVoice(event)" ontouchend="stopVoice(event)">
+              onmousedown="startVoice(event)" onmouseup="stopVoice(event)"
+              ontouchstart="startVoiceTouchStart(event)" ontouchend="startVoiceTouchEnd(event)">
               <svg width="26" height="26" fill="none" stroke="var(--bg)" stroke-width="2.2" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
             </button>
           </div>
@@ -913,10 +913,18 @@ function getAudioCtx(){
   return _audioCtx;
 }
 
+function startVoiceTouchStart(e){
+  // Do NOT preventDefault - iOS needs the gesture to activate microphone
+  startVoice(null);
+}
+
+function startVoiceTouchEnd(e){
+  stopVoice(null);
+}
+
 function startVoice(e){
-  if(e){ e.preventDefault(); e.stopPropagation(); }
   if(_voiceListening) return;
-  getAudioCtx(); // init on user gesture for TTS later
+  getAudioCtx();
   
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
@@ -984,7 +992,6 @@ function startVoice(e){
 }
 
 function stopVoice(e){
-  if(e){ e.preventDefault(); e.stopPropagation(); }
   if(!_voiceListening) return;
   _voiceListening = false;
   stopVoiceUI();
