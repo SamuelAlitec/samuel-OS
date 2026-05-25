@@ -972,6 +972,15 @@ function stopVoiceUI(){
 
 async function processVoiceInput(){
   setTranscript('A processar...', false);
+  console.log('Audio chunks:', _audioChunks.length, 'OpenAI key:', openaiKey?'set':'missing');
+  if(!openaiKey){
+    setTranscript('Configura a OpenAI key nas Definições.', false);
+    return;
+  }
+  if(!_audioChunks.length){
+    setTranscript('Não captei audio. Tenta de novo.', false);
+    return;
+  }
   if(openaiKey && _audioChunks.length){
     var blob = new Blob(_audioChunks, {type:'audio/webm'});
     var form = new FormData();
@@ -987,10 +996,11 @@ async function processVoiceInput(){
       });
       var d = await res.json();
       if(d.text && d.text.trim()){
-        setTranscript('"'+d.text.trim()+'"', true);
-        await runCaptureText(d.text.trim());
+        var txt = d.text.trim();
+        setTranscript('"'+txt+'"', true);
+        runCaptureText(txt); // don't await — respond immediately
       } else {
-        setTranscript('Nao percebi. Tenta de novo.', false);
+        setTranscript('Não percebi. Tenta de novo.', false);
       }
     }catch(e){
       setTranscript('Pressiona e fala', false);
@@ -1014,7 +1024,7 @@ async function speakText(text, onDone){
     var res = await fetch('https://api.openai.com/v1/audio/speech',{
       method:'POST',
       headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-      body:JSON.stringify({model:'tts-1-hd',input:text,voice:'nova',speed:1.05})
+      body:JSON.stringify({model:'tts-1-hd',input:text,voice:'nova',speed:0.88})
     });
     if(!res.ok) throw new Error('TTS '+res.status);
     var ab = await res.arrayBuffer();
@@ -1022,13 +1032,22 @@ async function speakText(text, onDone){
     var buf = await ctx.decodeAudioData(ab);
     var src = ctx.createBufferSource();
     src.buffer=buf; src.connect(ctx.destination); src.start(0);
-    src.onended = function(){ if(onDone) onDone(); };
-  }catch(e){ if(onDone) onDone(); }
+    src.onended = function(){
+      var b=document.getElementById('btn-speak');
+      if(b){ b.textContent='🔊 Ouvir'; b.disabled=false; }
+      if(onDone) onDone();
+    };
+  }catch(e){
+    var b=document.getElementById('btn-speak');
+    if(b){ b.textContent='🔊 Ouvir'; b.disabled=false; }
+    if(onDone) onDone();
+  }
 }
 
 async function speakBriefing(){
   getAudioCtx();
   var btn = document.getElementById('btn-speak');
+  if(btn){ btn.textContent='⏳ A preparar...'; btn.disabled=true; }
   var active = leads.filter(function(l){ return l.stage!=='ganho'&&l.stage!=='perdido'; });
   var overdue = active.filter(function(l){ return l.followup&&daysDiff(l.followup)<0; }).length;
   var todayL = active.filter(function(l){ return l.followup===today(); }).length;
