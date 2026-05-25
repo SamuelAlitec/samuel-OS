@@ -876,6 +876,16 @@ function fabAction(){
   else if(active.id==='page-frentes') openAddTarefa(frentes[0]?frentes[0].id:null);
 }
 
+function goPageFilter(filter){
+  activeLeadFilter = filter==='today'?'todos':filter==='overdue'?'overdue':filter==='inactive'?'inactive':'todos';
+  goPage('pipeline');
+  // Apply filter after page loads
+  setTimeout(function(){
+    var btns = document.querySelectorAll('.page #page-pipeline .badge[onclick]');
+    // Just navigate, the filter is set
+  }, 300);
+}
+
 function goPage(name, el){
   var prev=document.querySelector('.page.active');
   if(prev){
@@ -974,15 +984,15 @@ function renderBriefingStats(){
   db.from('tarefas').select('id',{count:'exact'}).eq('estado','aberta').then(function(r){
     var tarefas=r.count||0;
     var stats=[
-      {icon:svgWarn(),val:overdue,label:'em atraso',warn:overdue>0},
-      {icon:svgCal(dayNum),val:todayL,label:'para hoje',ok:todayL>0},
-      {icon:svgSleep(),val:inactive,label:'sem contacto',warn:inactive>0},
-      {icon:svgTask(),val:tarefas,label:'tarefas abertas'}
+      {icon:svgWarn(),val:overdue,label:'em atraso',warn:overdue>0,action:"setFilter('overdue',document.querySelector('[onclick=\"setFilter(\\'overdue\\',this)\"]'));goPage('pipeline')"},
+      {icon:svgCal(dayNum),val:todayL,label:'para hoje',ok:todayL>0,action:"setFilter('todos',document.querySelector('[onclick=\"setFilter(\\'todos\\',this)\"]'));goPage('pipeline')"},
+      {icon:svgSleep(),val:inactive,label:'sem contacto',warn:inactive>0,action:"setFilter('todos',document.querySelector('[onclick=\"setFilter(\\'todos\\',this)\"]'));goPage('pipeline')"},
+      {icon:svgTask(),val:tarefas,label:'tarefas abertas',action:"goPage('frentes')"}
     ];
     var html='';
     stats.forEach(function(s){
       var cls='bstat'+(s.warn?' warn':s.ok?' ok':'');
-      html+='<div class="'+cls+'"><div class="bstat-icon">'+s.icon+'</div><div><div class="bstat-val">'+s.val+'</div><div class="bstat-label">'+s.label+'</div></div></div>';
+      html+='<div class="'+cls+'" onclick="'+s.action+'" style="cursor:pointer;"><div class="bstat-icon">'+s.icon+'</div><div><div class="bstat-val">'+s.val+'</div><div class="bstat-label">'+s.label+'</div></div></div>';
     });
     var el=$('briefing-stats');
     if(el){el.innerHTML=html;el.style.display='grid';}
