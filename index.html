@@ -1106,55 +1106,167 @@ async function speakText(text,onDone){
   }catch(e){ console.error('TTS error:',e); if(onDone)onDone(); }
 }
 
-// ─── CAPTURE ──────────────────────────────────────────────────────────────────
+// ─── CONVERSATIONAL CAPTURE ──────────────────────────────────────────────────
+var captureConvHistory = [];
+
 async function runCapture(){
-  var texto=$('capture-input').value.trim();
+  var texto = $('capture-input').value.trim();
   if(!texto) return;
-  if(!apiKey){ showFeedback('Configura a API key nas Definicoes.',false); return; }
-  showFeedback('A classificar...',null);
-  var leadsCtx=leads.slice(0,12).map(function(l){return l.id+':'+l.company;}).join(',');
-  var frentesCtx=frentes.map(function(f){return f.id+':'+f.nome;}).join(',');
-  var prompt='Classifica esta nota: "'+texto+'"\nLeads: '+(leadsCtx||'nenhum')+'\nFrentes: '+frentesCtx+'\nResponde APENAS JSON: {"tipo":"interacao_lead"|"tarefa_frente"|"update_frente"|"incerto","confianca":"alta"|"baixa","destino_id":N|null,"destino_nome":"","acao":"","data_limite":"YYYY-MM-DD"|null,"prioridade":"alta"|"normal","pergunta":null|"pergunta se incerto"}\nRegras: empresa/cliente=interacao_lead; frente+acao futura=tarefa_frente; frente+aconteceu=update_frente';
+  if(!apiKey){ addChatBubble('ai','Configura a API key nas Definicoes.'); return; }
+
+  addChatBubble('user', texto);
+  $('capture-input').value = '';
+  $('btn-capture-send').disabled = true;
+
+  var leadsCtx = leads.slice(0,15).map(function(l){ return l.id+':'+l.company+'('+l.stage+')'; }).join(', ');
+  var frentesCtx = frentes.map(function(f){ return f.id+':'+f.nome; }).join(', ');
+  var histCtx = captureConvHistory.slice(-4).map(function(m){ return (m.role==='user'?'Samuel':'Assistente')+': '+m.content; }).join('\n');
+
+  captureConvHistory.push({role:'user', content:texto});
+
+  var systemPrompt = 'You are the assistant of Samuel Constantino, CEO of Alitec, a Portuguese food company. Samuel speaks to you to register things.\n\nExisting leads: '+leadsCtx+'\nActive fronts/projects: '+frentesCtx+'\n\nRules:\n1. If you have enough information, respond with a create action immediately.\n2. Only ask ONE short question if critical info is truly missing (e.g. a meeting with no date or time).\n3. Never ask obvious things. "Reuniao com Ruslan amanha as 10" has everything - create directly.\n4. Respond ONLY with valid JSON, nothing else.\n\nJSON formats:\n{"action":"create","tipo":"interacao_lead","destino_id":N,"destino_nome":"name","texto":"description","data":"YYYY-MM-DD","hora":"HH:MM","prioridade":"normal"}\n{"action":"create","tipo":"tarefa_frente","destino_id":N,"destino_nome":"name","texto":"task text","data":"YYYY-MM-DD","prioridade":"normal"}\n{"action":"create","tipo":"update_frente","destino_id":N,"destino_nome":"name","texto":"update text"}\n{"action":"ask","pergunta":"short question in European Portuguese"}\n\nRecent context:\n'+histCtx;
+
   try{
-    var res=await fetch('https://api.anthropic.com/v1/messages',{
+    var msgs = captureConvHistory.slice(-6).map(function(m){
+      return {role: m.role==='ai'?'assistant':'user', content: m.content};
+    });
+    var res = await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:300,messages:[{role:'user',content:prompt}]})
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:400,system:systemPrompt,messages:msgs})
     });
-    var d=await res.json();
-    var rawTxt=d.content[0].text||'';
-    var jMatch=rawTxt.match(/\{[^{}]*\}/);
-    var parsed=null;
-    if(jMatch){ try{ parsed=JSON.parse(jMatch[0]); }catch(e){ parsed=null; } }
-    if(!parsed){ parsed={tipo:'incerto',confianca:'baixa',pergunta:'Nao percebi. Podes reformular?'}; }
-    processCaptureResult(parsed,texto);
-  } catch(e){ showFeedback('Erro: '+e.message,false); }
+    var d = await res.json();
+    var rawText = (d.content&&d.content[0]) ? d.content[0].text : '';
+    var jMatch = rawText.match(/\{[^{}]*\}/);
+    var parsed = null;
+    if(jMatch){ try{ parsed = JSON.parse(jMatch[0]); }catch(e){ parsed = null; } }
+    if(!parsed){ parsed = {action:'ask', pergunta:'Nao percebi. Podes reformular?'}; }
+    await handleCaptureResponse(parsed, texto);
+  }catch(e){
+    addChatBubble('ai', 'Erro: '+e.message);
+  }
+  $('btn-capture-send').disabled = false;
 }
 
-function processCaptureResult(p,original){
-  if(p.confianca==='baixa'||p.tipo==='incerto'){
-    var btns='';
-    frentes.forEach(function(f){ btns+='<button onclick="confirmCapture(\''+(p.tipo==='incerto'?'tarefa_frente':p.tipo)+'\','+f.id+',\''+original.replace(/'/g,"\\'")+'\')" style="display:inline-flex;padding:6px 12px;margin:3px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;color:var(--text);font-family:inherit;">'+f.nome+'</button>'; });
-    showFeedback('<strong>'+(p.pergunta||'Onde devo guardar isto?')+'</strong><div style="margin-top:8px;">'+btns+'</div>',null,true);
+async function handleCaptureResponse(parsed, original){
+  if(parsed.action === 'ask'){
+    var q = parsed.pergunta || 'Nao percebi.';
+    addChatBubble('ai', q);
+    captureConvHistory.push({role:'ai', content:q});
+    if(openaiKey) speakText(q, null);
+    setTimeout(function(){ $('capture-input').focus(); }, 150);
     return;
   }
-  var tipoL={interacao_lead:'Interacao no lead',tarefa_frente:'Tarefa na frente',update_frente:'Update na frente'};
-  var tipoLabel=tipoL[p.tipo]||p.tipo;
-  var dateInfo=p.data_limite?(p.hora?' '+p.data_limite+' '+p.hora:' '+p.data_limite):'';
-  var msg='<strong style="color:var(--green)">'+tipoLabel+'</strong> '+h(p.destino_nome)+' - '+h(p.acao)+dateInfo;
-  msg+='<br><div style="display:flex;gap:8px;margin-top:10px;">';
-  window._pendingCapture={tipo:p.tipo,id:p.destino_id,original:original,data:p.data_limite||'',prio:p.prioridade||'normal',hora:p.hora||''};
-  msg+='<button onclick="doPendingCapture()" style="padding:8px 16px;background:var(--text);color:var(--bg);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">Confirmar</button>';
-  msg+='<button onclick="hideFeedback()" style="padding:8px 16px;background:var(--bg2);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">Cancelar</button></div>';
-  showFeedback(msg,null,true);
+
+  if(parsed.action === 'create'){
+    var msg = '';
+    var tipo = parsed.tipo;
+    var id = parsed.destino_id;
+    var nome = parsed.destino_nome || '';
+
+    if(tipo === 'interacao_lead'){
+      var lead = leads.find(function(l){ return l.id == id; });
+      if(lead){
+        await db.from('interactions').insert({lead_id:id,date:parsed.data||today(),type:'outro',notes:parsed.texto||original});
+        await db.from('leads').update({last_interaction:today()}).eq('id',id);
+        var li = leads.find(function(x){ return x.id==id; }); if(li) li.last_interaction = today();
+        msg = 'Interaccao registada em '+nome+(parsed.data?' para '+parsed.data:'')+'.';
+      }
+    } else if(tipo === 'tarefa_frente'){
+      await db.from('tarefas').insert({frente_id:id,texto:parsed.texto||original,prioridade:parsed.prioridade||'normal',data_limite:parsed.data||null,estado:'aberta'});
+      msg = 'Tarefa criada em '+nome+(parsed.data?' para '+parsed.data:'')+'.';
+    } else if(tipo === 'update_frente'){
+      await db.from('frente_updates').insert({frente_id:id,texto:parsed.texto||original});
+      msg = 'Update registado em '+nome+'.';
+    }
+
+    if(parsed.data && parsed.hora){
+      msg += ' Queres adicionar ao calendario?';
+      window._pendingCal = {title:nome,date:parsed.data,time:parsed.hora,desc:parsed.texto||original};
+      addChatBubbleWithBtn('ai', msg, '+ Agenda', 'doCalendar()');
+    } else {
+      addChatBubble('ai', msg);
+    }
+
+    captureConvHistory.push({role:'ai', content:msg});
+    if(openaiKey) speakText(msg, null);
+    loadFrente(); loadPriorities(); renderLeads();
+
+    // Auto-clear chat after 10s of no activity
+    clearTimeout(window._chatTimer);
+    window._chatTimer = setTimeout(function(){
+      captureConvHistory = [];
+      var ch = $('chat-history');
+      if(!ch) return;
+      ch.style.transition = 'opacity .4s';
+      ch.style.opacity = '0';
+      setTimeout(function(){
+        ch.innerHTML = ''; ch.style.display = 'none';
+        ch.style.opacity = ''; ch.style.transition = '';
+        $('capture-card').classList.remove('has-chat');
+      }, 400);
+    }, 10000);
+    return;
+  }
+}
+
+function addChatBubble(role, text){
+  var ch = $('chat-history');
+  if(!ch) return;
+  ch.style.display = 'block';
+  $('capture-card').classList.add('has-chat');
+  var div = document.createElement('div');
+  div.className = 'chat-msg '+role;
+  var bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+  bubble.textContent = text;
+  div.appendChild(bubble);
+  ch.appendChild(div);
+  ch.scrollTop = ch.scrollHeight;
+}
+
+function addChatBubbleWithBtn(role, text, btnLabel, btnAction){
+  var ch = $('chat-history');
+  if(!ch) return;
+  ch.style.display = 'block';
+  $('capture-card').classList.add('has-chat');
+  var div = document.createElement('div');
+  div.className = 'chat-msg '+role;
+  div.innerHTML = '<div class="chat-bubble">'+text+' <button onclick="'+btnAction+'" style="background:var(--text);color:var(--bg);border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-family:inherit;cursor:pointer;margin-top:6px;display:inline-block;">'+btnLabel+'</button></div>';
+  ch.appendChild(div);
+  ch.scrollTop = ch.scrollHeight;
+}
+
+function doCalendar(){
+  var c = window._pendingCal;
+  if(c) createCalendarEvent(c.title, c.date, c.time, c.desc);
+}
+
+function createCalendarEvent(title, date, time, description){
+  var dt = date.replace(/-/g,'');
+  var tm = time.replace(':','');
+  var endH = parseInt(time.split(':')[0])+1;
+  var endTm = (endH<10?'0':'')+endH+time.split(':')[1];
+  var CRLF = '\r\n';
+  var ics = 'BEGIN:VCALENDAR'+CRLF+'VERSION:2.0'+CRLF+'PRODID:-//AlitecOS//EN'+CRLF+'BEGIN:VEVENT'+CRLF
+    +'DTSTART:'+dt+'T'+tm+'00'+CRLF+'DTEND:'+dt+'T'+endTm+'00'+CRLF
+    +'SUMMARY:'+title+CRLF+'DESCRIPTION:'+(description||'')+CRLF
+    +'END:VEVENT'+CRLF+'END:VCALENDAR';
+  var blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'evento.ics';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function doPendingCapture(){
-  var p=window._pendingCapture;
-  if(p) confirmCapture(p.tipo,p.id,p.original,p.data,p.prio,p.hora);
+  var p = window._pendingCapture;
+  if(p) confirmCapture(p.tipo, p.id, p.original, p.data, p.prio, p.hora);
 }
 
-async function confirmCapture(tipo,id,original,data_limite,prioridade,hora){
+async function confirmCapture(tipo, id, original, data_limite, prioridade, hora){
   if(tipo==='interacao_lead'){
     await db.from('interactions').insert({lead_id:id,date:today(),type:'outro',notes:original});
     await db.from('leads').update({last_interaction:today()}).eq('id',id);
@@ -1165,12 +1277,10 @@ async function confirmCapture(tipo,id,original,data_limite,prioridade,hora){
     await db.from('frente_updates').insert({frente_id:id,texto:original});
   }
   $('capture-input').value='';
-  // If has date+time, offer calendar
   if(data_limite&&hora){
     var destNome=tipo==='interacao_lead'?(leads.find(function(l){return l.id==id;})||{company:'Reuniao'}).company:'Tarefa';
-        window._pendingCal={title:destNome,date:data_limite,time:hora,desc:original};
+    window._pendingCal={title:destNome,date:data_limite,time:hora,desc:original};
     showFeedback('Guardado. <button onclick="doCalendar()" style="background:var(--text);color:var(--bg);border:none;border-radius:6px;padding:5px 12px;font-size:13px;cursor:pointer;font-family:inherit;margin-left:8px;">+ Agenda iPhone</button>',true,true);
-    setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },6000);
     setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },6000);
   } else {
     showFeedback('Guardado.',true);
@@ -1178,26 +1288,6 @@ async function confirmCapture(tipo,id,original,data_limite,prioridade,hora){
   }
 }
 
-function doCalendar(){
-  var c=window._pendingCal;
-  if(c) createCalendarEvent(c.title,c.date,c.time,c.desc);
-}
-
-function createCalendarEvent(title,date,time,description){
-  var dt=date.replace(/-/g,'');
-  var tm=time.replace(':','');
-  var endH=parseInt(time.split(':')[0])+1;
-  var endTm=(endH<10?'0':'')+endH+time.split(':')[1];
-  var CRLF='\r\n'; var ics='BEGIN:VCALENDAR'+CRLF+'VERSION:2.0'+CRLF+'PRODID:-//AlitecOS//EN'+CRLF+'BEGIN:VEVENT'+CRLF+'DTSTART:'+dt+'T'+tm+'00'+CRLF+'DTEND:'+dt+'T'+endTm+'00'+CRLF+'SUMMARY:'+title+CRLF+'DESCRIPTION:'+description+CRLF+'END:VEVENT'+CRLF+'END:VCALENDAR';
-  
-  var blob=new Blob([ics],{type:'text/calendar;charset=utf-8'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url; a.download='evento.ics';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
 
 function showFeedback(html,ok,raw){
   var el=$('capture-feedback');
