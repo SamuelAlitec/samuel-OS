@@ -72,9 +72,9 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 .sl-logo img { height: 24px; object-fit: contain; display: block; }
 .sl-nav { flex: 1; padding: 8px; overflow-y: auto; }
 .sl-section { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text4); padding: 14px 12px 4px; }
-.sl-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r); font-size: 14px; font-weight: 400; color: var(--text3); cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: var(--font); transition: all .2s var(--ease); position: relative; letter-spacing: -.01em; }
+.sl-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r); font-size: 13px; font-weight: 400; color: var(--text3); cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: var(--font); transition: all .25s var(--spring); position: relative; letter-spacing: -.01em; transform-origin: left center; }
 .sl-item:hover { background: var(--surface2); color: var(--text); }
-.sl-item.active { background: var(--surface2); color: var(--text); font-weight: 600; }
+.sl-item.active { background: var(--surface2); color: var(--text); font-weight: 700; font-size: 14.5px; }
 .sl-item.active::before { content: ''; position: absolute; left: 0; top: 22%; bottom: 22%; width: 3px; background: var(--red); border-radius: 0 2px 2px 0; }
 .sl-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; transition: background .2s; }
 .sl-item.active .sl-icon { background: var(--red-light); }
@@ -91,8 +91,10 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 6px 0 calc(6px + var(--safe-b)); z-index: 100; }
 .bn-items { display: flex; justify-content: space-around; }
 .bn-item { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; font-weight: 500; color: var(--text4); cursor: pointer; padding: 4px 14px; border: none; background: none; font-family: var(--font); position: relative; transition: color .2s; }
-.bn-item svg { width: 23px; height: 23px; transition: transform .2s var(--spring); }
-.bn-item.active { color: var(--red); }
+.bn-item svg { width: 21px; height: 21px; transition: transform .25s var(--spring); }
+.bn-item { font-size: 9px; }
+.bn-item.active { color: var(--red); font-size: 11px; font-weight: 700; }
+.bn-item.active svg { width: 24px; height: 24px; }
 .bn-item:active svg { transform: scale(.84); }
 .bn-dot { position: absolute; top: 2px; right: 8px; width: 8px; height: 8px; background: var(--red-mid); border-radius: 50%; border: 2px solid var(--surface); }
 
@@ -248,9 +250,11 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 .sheet-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .stab { flex: 1; min-width: fit-content; text-align: center; padding: 10px 8px; font-size: 13px; font-weight: 600; color: var(--text3); border: none; background: none; cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -1px; font-family: var(--font); transition: all .2s; white-space: nowrap; }
 .stab.active { color: var(--red); border-bottom-color: var(--red); }
-.stab-pane { display: none; animation: fade-up .18s ease; }
-.stab-pane.active { display: block; }
-@keyframes fade-up { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.stab-pane { display: none; }
+.stab-pane.active { display: block; animation: slide-in-right .22s var(--ease); }
+.stab-pane.slide-left { animation: slide-in-left .22s var(--ease); }
+@keyframes slide-in-right { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes slide-in-left { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
 
 /* ── FAB ── */
 .fab { position: fixed; bottom: calc(82px + var(--safe-b)); right: 18px; width: 54px; height: 54px; background: var(--text); border-radius: 50%; border: none; cursor: pointer; display: none; align-items: center; justify-content: center; box-shadow: 0 4px 20px rgba(0,0,0,.25); z-index: 50; transition: transform .2s var(--spring); }
@@ -1581,10 +1585,16 @@ function copyEmail(){
 
 // ─── LEAD MODAL TABS ──────────────────────────────────────────────────────────
 function switchSTab(modal,name,btnEl){
+  var tabs=Array.from(document.querySelectorAll('#modal-'+modal+' .stab'));
+  var currentIdx=tabs.findIndex(function(t){return t.classList.contains('active');});
+  var newIdx=tabs.indexOf(btnEl);
+  var goingRight=newIdx>currentIdx;
   document.querySelectorAll('#modal-'+modal+' .stab').forEach(function(t){t.classList.remove('active');});
-  document.querySelectorAll('#modal-'+modal+' .stab-pane').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('#modal-'+modal+' .stab-pane').forEach(function(p){p.classList.remove('active','slide-left');});
   btnEl.classList.add('active');
-  $(( modal==='lead'?'ltab':'ftab')+'-'+name).classList.add('active');
+  var pane=$(( modal==='lead'?'ltab':'ftab')+'-'+name);
+  pane.classList.add('active');
+  if(!goingRight) pane.classList.add('slide-left');
   if(modal==='lead'&&name==='contactos') loadLeadContactos();
   if(modal==='lead'&&name==='historico') loadLeadHistorico();
   if(modal==='lead'&&name==='amostras') loadLeadAmostras();
@@ -1690,17 +1700,23 @@ async function loadFrenteTarefas(){
 
   if(!abertas.length) html+='<div style="padding:16px 0;color:var(--text4);font-size:14px;text-align:center;">Sem tarefas abertas</div>';
 
-  // Completed
+  // Completed section — collapsible
   if(fechadas.length){
-    html+='<div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text4);padding:16px 0 8px;">Concluídas ('+fechadas.length+')</div>';
-    fechadas.slice(0,5).forEach(function(t){
-      html+='<div class="task-item-v2" style="opacity:.5;">'
-        +'<div class="task-check-v2 checking" style="pointer-events:none;">'
-        +'<svg width="12" height="12" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>'
+    html+='<div style="margin-top:8px;">'
+      +'<button onclick="toggleCompleted(this)" style="width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:10px 0;font-family:var(--font);display:flex;align-items:center;gap:8px;">'
+      +'<svg id="completed-chevron" width="14" height="14" fill="none" stroke="var(--text4)" stroke-width="2" viewBox="0 0 24 24" style="transition:transform .2s;"><path d="m9 18 6-6-6-6"/></svg>'
+      +'<span style="font-size:12px;font-weight:600;color:var(--text4);">'+fechadas.length+' concluída'+(fechadas.length===1?'':'s')+'</span>'
+      +'</button>'
+      +'<div id="completed-list" style="display:none;">';
+    fechadas.slice(0,8).forEach(function(t){
+      html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);opacity:.45;">'
+        +'<div style="width:20px;height:20px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+        +'<svg width="10" height="10" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>'
         +'</div>'
-        +'<div class="task-body-v2"><div class="task-text-v2 done">'+h(t.texto)+'</div></div>'
+        +'<span style="font-size:14px;text-decoration:line-through;color:var(--text4);">'+h(t.texto)+'</span>'
         +'</div>';
     });
+    html+='</div></div>';
   }
 
   html+='</div>';
@@ -1712,6 +1728,15 @@ function toggleAddTaskForm(){
   if(!f) return;
   f.classList.toggle('show');
   if(f.classList.contains('show')) document.getElementById('ft-texto').focus();
+}
+
+function toggleCompleted(btn){
+  var list=document.getElementById('completed-list');
+  var chevron=document.getElementById('completed-chevron');
+  if(!list) return;
+  var isOpen=list.style.display!=='none';
+  list.style.display=isOpen?'none':'block';
+  if(chevron) chevron.style.transform=isOpen?'':'rotate(90deg)';
 }
 
 async function completeTarefa(id, btnEl){
