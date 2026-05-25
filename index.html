@@ -1139,10 +1139,22 @@ function processCaptureResult(p,original){
     return;
   }
   var tipoL={interacao_lead:'Interacao no lead',tarefa_frente:'Tarefa na frente',update_frente:'Update na frente'};
-  showFeedback('<strong style="color:var(--green)">Guardado como: '+(tipoL[p.tipo]||p.tipo)+'</strong> '+h(p.destino_nome)+' - "'+h(p.acao)+'"<br><div style="display:flex;gap:8px;margin-top:10px;"><button onclick="confirmCapture(\''+p.tipo+'\','+p.destino_id+',\''+original.replace(/'/g,"\\'")+'\',\''+( p.data_limite||'')+'\',\''+( p.prioridade||'normal')+'\')" style="padding:8px 16px;background:var(--text);color:var(--bg);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">Confirmar</button><button onclick="hideFeedback()" style="padding:8px 16px;background:var(--bg2);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">Cancelar</button></div>',null,true);
+  var tipoLabel=tipoL[p.tipo]||p.tipo;
+  var dateInfo=p.data_limite?(p.hora?' '+p.data_limite+' '+p.hora:' '+p.data_limite):'';
+  var msg='<strong style="color:var(--green)">'+tipoLabel+'</strong> '+h(p.destino_nome)+' - '+h(p.acao)+dateInfo;
+  msg+='<br><div style="display:flex;gap:8px;margin-top:10px;">';
+  window._pendingCapture={tipo:p.tipo,id:p.destino_id,original:original,data:p.data_limite||'',prio:p.prioridade||'normal',hora:p.hora||''};
+  msg+='<button onclick="doPendingCapture()" style="padding:8px 16px;background:var(--text);color:var(--bg);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">Confirmar</button>';
+  msg+='<button onclick="hideFeedback()" style="padding:8px 16px;background:var(--bg2);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">Cancelar</button></div>';
+  showFeedback(msg,null,true);
 }
 
-async function confirmCapture(tipo,id,original,data_limite,prioridade){
+function doPendingCapture(){
+  var p=window._pendingCapture;
+  if(p) confirmCapture(p.tipo,p.id,p.original,p.data,p.prio,p.hora);
+}
+
+async function confirmCapture(tipo,id,original,data_limite,prioridade,hora){
   if(tipo==='interacao_lead'){
     await db.from('interactions').insert({lead_id:id,date:today(),type:'outro',notes:original});
     await db.from('leads').update({last_interaction:today()}).eq('id',id);
@@ -1153,8 +1165,38 @@ async function confirmCapture(tipo,id,original,data_limite,prioridade){
     await db.from('frente_updates').insert({frente_id:id,texto:original});
   }
   $('capture-input').value='';
-  showFeedback('Guardado.',true);
-  setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },1200);
+  // If has date+time, offer calendar
+  if(data_limite&&hora){
+    var destNome=tipo==='interacao_lead'?(leads.find(function(l){return l.id==id;})||{company:'Reuniao'}).company:'Tarefa';
+        window._pendingCal={title:destNome,date:data_limite,time:hora,desc:original};
+    showFeedback('Guardado. <button onclick="doCalendar()" style="background:var(--text);color:var(--bg);border:none;border-radius:6px;padding:5px 12px;font-size:13px;cursor:pointer;font-family:inherit;margin-left:8px;">+ Agenda iPhone</button>',true,true);
+    setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },6000);
+    setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },6000);
+  } else {
+    showFeedback('Guardado.',true);
+    setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },1500);
+  }
+}
+
+function doCalendar(){
+  var c=window._pendingCal;
+  if(c) createCalendarEvent(c.title,c.date,c.time,c.desc);
+}
+
+function createCalendarEvent(title,date,time,description){
+  var dt=date.replace(/-/g,'');
+  var tm=time.replace(':','');
+  var endH=parseInt(time.split(':')[0])+1;
+  var endTm=(endH<10?'0':'')+endH+time.split(':')[1];
+  var CRLF='\r\n'; var ics='BEGIN:VCALENDAR'+CRLF+'VERSION:2.0'+CRLF+'PRODID:-//AlitecOS//EN'+CRLF+'BEGIN:VEVENT'+CRLF+'DTSTART:'+dt+'T'+tm+'00'+CRLF+'DTEND:'+dt+'T'+endTm+'00'+CRLF+'SUMMARY:'+title+CRLF+'DESCRIPTION:'+description+CRLF+'END:VEVENT'+CRLF+'END:VCALENDAR';
+  
+  var blob=new Blob([ics],{type:'text/calendar;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download='evento.ics';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function showFeedback(html,ok,raw){
@@ -1617,22 +1659,47 @@ async function loadSettings(){
 }
 
 // ─── PWA ──────────────────────────────────────────────────────────────────────
+const VAPID_PUBLIC_KEY = 'BKc7oxUq9i-R7zGEaTAvgdk1OVS6tDYl2pNOYIQ30FwMsd2jVWxJyD2AfYhk1Cik3bUYjDzra4ijFndb_BHzSTk';
+
+function urlBase64ToUint8Array(base64String) {
+  var padding = '='.repeat((4 - base64String.length % 4) % 4);
+  var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  var rawData = window.atob(base64);
+  var outputArray = new Uint8Array(rawData.length);
+  for (var i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+  return outputArray;
+}
+
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/sw.js').then(function(reg){
-    // Request push permission after first load
     if('PushManager' in window){
-      setTimeout(function(){ requestPushPermission(reg); }, 3000);
+      setTimeout(function(){ setupPush(reg); }, 4000);
     }
   }).catch(console.error);
 }
 
-async function requestPushPermission(reg){
-  if(Notification.permission==='granted') return;
-  if(Notification.permission==='denied') return;
-  var perm=await Notification.requestPermission();
-  if(perm==='granted'){
-    console.log('Push notifications enabled');
-  }
+async function setupPush(reg){
+  try{
+    var perm = await Notification.requestPermission();
+    if(perm !== 'granted') return;
+    var existing = await reg.pushManager.getSubscription();
+    if(existing){ await savePushSub(existing); return; }
+    var sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+    await savePushSub(sub);
+  }catch(e){ console.log('Push setup error:', e); }
+}
+
+async function savePushSub(sub){
+  var keys = sub.toJSON().keys;
+  await db.from('push_subscriptions').upsert({
+    endpoint: sub.endpoint,
+    p256dh: keys.p256dh,
+    auth: keys.auth
+  }, {onConflict: 'endpoint'});
+  console.log('Push subscription saved');
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
