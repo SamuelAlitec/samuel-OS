@@ -82,27 +82,27 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 .sl-bottom { padding: 8px 8px calc(16px + var(--safe-b)); border-top: 1px solid var(--border); }
 
 /* ── TOP BAR MOBILE ── */
-.topbar { display: none; align-items: center; justify-content: space-between; padding: calc(var(--safe-t) + 14px) 16px 14px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
+.topbar { display: none; align-items: center; justify-content: flex-end; padding: calc(var(--safe-t) + 10px) 16px 0; background: transparent; position: absolute; top: 0; right: 0; z-index: 20; }
 .topbar-title { font-size: 17px; font-weight: 700; letter-spacing: -.03em; }
 .topbar-btn { width: 34px; height: 34px; border-radius: 50%; background: var(--surface2); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text3); transition: transform .15s var(--spring); }
 .topbar-btn:active { transform: scale(.88); }
 
 /* ── BOTTOM NAV ── */
-.bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 6px 0 calc(6px + var(--safe-b)); z-index: 100; }
-.bn-items { display: flex; justify-content: space-around; }
-.bn-item { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; font-weight: 500; color: var(--text4); cursor: pointer; padding: 4px 14px; border: none; background: none; font-family: var(--font); position: relative; transition: color .2s; }
-.bn-item svg { width: 21px; height: 21px; transition: transform .25s var(--spring); }
-.bn-item { font-size: 9px; }
-.bn-item.active { color: var(--red); font-size: 11px; font-weight: 700; }
-.bn-item.active svg { width: 24px; height: 24px; }
-.bn-item:active svg { transform: scale(.84); }
-.bn-dot { position: absolute; top: 2px; right: 8px; width: 8px; height: 8px; background: var(--red-mid); border-radius: 50%; border: 2px solid var(--surface); }
+.bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 4px 0 calc(4px + var(--safe-b)); z-index: 100; }
+.bn-items { display: flex; justify-content: space-around; align-items: center; }
+.bn-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 9px; font-weight: 500; color: var(--text4); cursor: pointer; padding: 3px 10px; border: none; background: none; font-family: var(--font); position: relative; transition: color .2s; }
+.bn-item svg { width: 20px; height: 20px; transition: transform .28s var(--spring); }
+.bn-item.active { color: var(--red); font-size: 10px; font-weight: 700; }
+.bn-item.active svg { transform: scale(1.18); filter: drop-shadow(0 0 6px rgba(155,27,27,.25)); }
+.bn-item:active svg { transform: scale(.88); }
+.bn-dot { position: absolute; top: 1px; right: 8px; width: 7px; height: 7px; background: var(--red-mid); border-radius: 50%; border: 1.5px solid var(--surface); }
 
 @media(max-width:768px) {
   .sidebar { display: none; }
   .topbar { display: flex; }
   .bottom-nav { display: block; }
-  .page { padding-bottom: calc(76px + var(--safe-b)); }
+  .page { padding-bottom: calc(66px + var(--safe-b)); }
+  .page-hero { padding-top: calc(16px + var(--safe-t)); }
 }
 
 /* ── TYPOGRAPHY ── */
@@ -250,11 +250,12 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 .sheet-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .stab { flex: 1; min-width: fit-content; text-align: center; padding: 10px 8px; font-size: 13px; font-weight: 600; color: var(--text3); border: none; background: none; cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -1px; font-family: var(--font); transition: all .2s; white-space: nowrap; }
 .stab.active { color: var(--red); border-bottom-color: var(--red); }
+.stab-panes-wrap { position: relative; overflow: hidden; }
 .stab-pane { display: none; }
-.stab-pane.active { display: block; animation: slide-in-right .22s var(--ease); }
-.stab-pane.slide-left { animation: slide-in-left .22s var(--ease); }
-@keyframes slide-in-right { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
-@keyframes slide-in-left { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+.stab-pane.active { display: block; animation: slide-in-right .25s var(--ease); }
+.stab-pane.slide-left { animation: slide-in-left .25s var(--ease); }
+@keyframes slide-in-right { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+@keyframes slide-in-left { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: none; } }
 
 /* ── FAB ── */
 .fab { position: fixed; bottom: calc(82px + var(--safe-b)); right: 18px; width: 54px; height: 54px; background: var(--text); border-radius: 50%; border: none; cursor: pointer; display: none; align-items: center; justify-content: center; box-shadow: 0 4px 20px rgba(0,0,0,.25); z-index: 50; transition: transform .2s var(--spring); }
@@ -413,9 +414,9 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 <!-- MAIN -->
 <div class="main">
   <div class="topbar">
-    <div class="topbar-title" id="mobile-title">Início</div>
-    <button class="topbar-btn" onclick="openSettings()">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    <div class="topbar-title" id="mobile-title" style="display:none;"></div>
+    <button class="topbar-btn" onclick="openSettings()" style="background:var(--surface);box-shadow:0 1px 8px rgba(0,0,0,.08);">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
     </button>
   </div>
 
@@ -537,16 +538,16 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
     <div class="bn-items">
       <button class="bn-item active" data-page="home" onclick="goPage('home',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-        Home
+        Início
       </button>
       <button class="bn-item" data-page="pipeline" onclick="goPage('pipeline',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-        Pipeline
+        Comercial
         <span class="bn-dot" id="bnb-overdue" style="display:none"></span>
       </button>
       <button class="bn-item" data-page="frentes" onclick="goPage('frentes',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        Frentes
+        Operações
         <span class="bn-dot" id="bnb-tarefas" style="display:none"></span>
       </button>
       <button class="bn-item" onclick="openSettings()">
