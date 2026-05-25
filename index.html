@@ -2,7 +2,7 @@
 <html lang="pt">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Alitec OS">
@@ -100,7 +100,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
   .sidebar { display: none; }
   .topbar { display: flex; }
   .bottom-nav { display: block; }
-  .page { padding-bottom: calc(76px + var(--safe-b)); }
+  .page { padding-bottom: 70px; }
 }
 
 /* ── TYPOGRAPHY ── */
@@ -248,11 +248,9 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 .sheet-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .stab { flex: 1; min-width: fit-content; text-align: center; padding: 10px 8px; font-size: 13px; font-weight: 600; color: var(--text3); border: none; background: none; cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -1px; font-family: var(--font); transition: all .2s; white-space: nowrap; }
 .stab.active { color: var(--red); border-bottom-color: var(--red); }
-.stab-pane { display: none; min-height: 320px; }
-.stab-pane.active { display: block; animation: slide-in-right .25s ease; }
-.stab-pane.slide-left { animation: slide-in-left .25s ease; }
-@keyframes slide-in-right { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
-@keyframes slide-in-left { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+.stab-pane { display: none; min-height: 300px; }
+.stab-pane.active { display: block; animation: stab-in .22s ease; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 
 /* ── FAB ── */
 .fab { position: fixed; bottom: calc(82px + var(--safe-b)); right: 18px; width: 54px; height: 54px; background: var(--text); border-radius: 50%; border: none; cursor: pointer; display: none; align-items: center; justify-content: center; box-shadow: 0 4px 20px rgba(0,0,0,.25); z-index: 50; transition: transform .2s var(--spring); }
@@ -373,6 +371,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 .log-form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
 
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes stab-in { from { opacity:0; transform:translateX(12px); } to { opacity:1; transform:none; } }
 </style>
 </head>
 <body>
@@ -439,6 +438,19 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
         </div>
       </div>
 
+      <!-- BRIEFING -->
+      <div style="padding:12px 16px 4px;">
+        <div style="background:var(--text);border-radius:var(--r-xl);padding:18px 20px;position:relative;overflow:hidden;">
+          <div style="position:absolute;top:-40px;right:-40px;width:120px;height:120px;border-radius:50%;background:var(--red);opacity:.12;pointer-events:none;"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);">Hoje</span>
+            <button id="btn-speak" onclick="speakBriefing()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.8);border-radius:99px;padding:5px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font);display:none;">🔊 Ouvir</button>
+          </div>
+          <div id="briefing-skeleton" style="height:48px;border-radius:var(--r);background:linear-gradient(90deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.1) 50%,rgba(255,255,255,.04) 100%);background-size:200% 100%;animation:shimmer 1.8s infinite;"></div>
+          <div id="briefing-text" style="display:none;font-size:14px;line-height:1.65;color:rgba(255,255,255,.88);"></div>
+        </div>
+      </div>
+
       <!-- STATS -->
       <div class="stats-grid">
         <div class="stat-card stat-warn" onclick="goPageFilter('overdue')">
@@ -477,12 +489,11 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
             <div class="mic-ring" id="mic-ring"></div>
             <button class="mic-btn" id="mic-btn"
               onmousedown="startVoice()" onmouseup="stopVoice()"
-              ontouchstart="handleMicTouch(event,'start')" ontouchend="handleMicTouch(event,'stop')">
+              ontouchstart="startVoice(event)" ontouchend="stopVoice(event)">
               <svg width="26" height="26" fill="none" stroke="var(--bg)" stroke-width="2.2" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
             </button>
           </div>
           <div class="mic-label" id="mic-label">mantém premido para falar</div>
-          <input type="hidden" id="capture-input" value="">
           <div style="margin-top:12px;display:flex;gap:8px;align-items:flex-end;">
             <textarea id="capture-text" class="form-textarea" style="flex:1;min-height:40px;height:40px;padding:10px 12px;font-size:14px;resize:none;transition:height .2s;" placeholder="ou escreve aqui..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendText();}"></textarea>
             <button class="btn btn-primary btn-sm" onclick="sendText()" style="height:40px;padding:0 16px;flex-shrink:0;">↑</button>
@@ -499,7 +510,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 
     <!-- PIPELINE -->
     <div class="page" id="page-pipeline">
-      <div class="pipeline-header" style="padding:calc(16px + var(--safe-t)) 20px 0;">
+      <div class="pipeline-header" style="padding-top:calc(16px + var(--safe-t));">
         <div class="pipeline-title">Comercial</div>
       </div>
       <div class="pipeline-filters" id="pipeline-filters">
@@ -875,62 +886,163 @@ async function speakBriefing(){
 (function(){
   var wf = document.getElementById('waveform');
   if(!wf) return;
-  for(var i = 0; i < 22; i++){
-    var b = document.createElement('div');
-    b.className = 'wv-bar';
-    b.style.height = (4 + Math.random()*6) + 'px';
+  for(var i=0;i<22;i++){
+    var b=document.createElement('div');
+    b.className='wv-bar';
+    b.style.height=(4+Math.random()*8)+'px';
     wf.appendChild(b);
   }
 })();
 
 var _waveInterval = null;
+var _wvBars = null;
+
 function startWave(){
-  var bars = document.querySelectorAll('.wv-bar');
+  _wvBars = document.querySelectorAll('.wv-bar');
   _waveInterval = setInterval(function(){
-    bars.forEach(function(b){
-      b.style.height = (4 + Math.random()*32) + 'px';
+    _wvBars.forEach(function(b){
+      b.style.height=(4+Math.random()*34)+'px';
       b.classList.add('active');
     });
   }, 70);
 }
+
 function stopWave(){
   clearInterval(_waveInterval);
-  document.querySelectorAll('.wv-bar').forEach(function(b){
-    b.style.height = '5px';
-    b.classList.remove('active');
-  });
+  if(_wvBars) _wvBars.forEach(function(b){ b.style.height='5px'; b.classList.remove('active'); });
 }
 
-// ── AUDIO CONTEXT ────────────────────────────────────────────────────────────
+// ── VOICE CAPTURE UI ────────────────────────────────────────────────────────
+var _voiceListening = false;
+var _mediaRecorder = null;
+var _audioChunks = [];
 var _audioCtx = null;
+
 function getAudioCtx(){
   if(!_audioCtx) _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-  if(_audioCtx.state === 'suspended') _audioCtx.resume();
+  if(_audioCtx.state==='suspended') _audioCtx.resume();
   return _audioCtx;
 }
 
-// ── TTS ───────────────────────────────────────────────────────────────────────
+function startVoice(e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
+  if(_voiceListening) return;
+  getAudioCtx();
+  _voiceListening = true;
+  var btn = document.getElementById('mic-btn');
+  var ring = document.getElementById('mic-ring');
+  var label = document.getElementById('mic-label');
+  var card = document.getElementById('voice-card');
+  if(btn) btn.classList.add('listening');
+  if(ring) ring.classList.add('pulse');
+  if(label){ label.textContent='a ouvir...'; label.classList.add('listening'); }
+  if(card) card.classList.add('listening');
+  setTranscript('A ouvir...', false);
+  startWave();
+  // Start recording
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+    _audioChunks = [];
+    _mediaRecorder = new MediaRecorder(stream, {mimeType:'audio/webm'});
+    _mediaRecorder.ondataavailable = function(e){ if(e.data.size>0) _audioChunks.push(e.data); };
+    _mediaRecorder.onstop = function(){ stream.getTracks().forEach(function(t){t.stop();}); processVoiceInput(); };
+    _mediaRecorder.start();
+  }).catch(function(){
+    // Fallback browser SR
+    var SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){ setTranscript('Microfone nao disponivel.', false); stopVoiceUI(); return; }
+    var rec = new SR();
+    rec.lang='pt-PT'; rec.continuous=false; rec.interimResults=true;
+    rec.onresult = function(e){ setTranscript('"'+Array.from(e.results).map(function(r){return r[0].transcript;}).join('')+'"', true); };
+    rec.onend = function(){
+    stopVoiceUI();
+    var tr = document.getElementById('voice-transcript');
+    var txt = tr ? tr.dataset.text : '';
+    if(txt && txt.trim()){
+      addChatBubble('user', txt.trim());
+      runCapture(txt.trim());
+    }
+  };
+    rec.start();
+    _mediaRecorder = {stop:function(){rec.stop();}, _isSR:true};
+  });
+}
+
+function stopVoice(e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
+  if(!_voiceListening) return;
+  _voiceListening = false;
+  stopVoiceUI();
+  if(_mediaRecorder && !_mediaRecorder._isSR && _mediaRecorder.state !== 'inactive'){
+    _mediaRecorder.stop();
+  }
+}
+
+function stopVoiceUI(){
+  var btn=document.getElementById('mic-btn');
+  var ring=document.getElementById('mic-ring');
+  var label=document.getElementById('mic-label');
+  var card=document.getElementById('voice-card');
+  if(btn) btn.classList.remove('listening');
+  if(ring) ring.classList.remove('pulse');
+  if(label){ label.textContent='mantém premido para falar'; label.classList.remove('listening'); }
+  if(card) card.classList.remove('listening');
+  stopWave();
+}
+
+async function processVoiceInput(){
+  setTranscript('A processar...', false);
+  if(openaiKey && _audioChunks.length){
+    var blob = new Blob(_audioChunks, {type:'audio/webm'});
+    var form = new FormData();
+    form.append('file', blob, 'audio.webm');
+    form.append('model', 'whisper-1');
+    form.append('language', 'pt');
+    form.append('prompt', 'Alitec, Frutta Nature, BidFood, Makro, Aviludo, Continente, Ruslan, PRR, INOVFRUTTA, Vitafoods');
+    try{
+      var res = await fetch('https://api.openai.com/v1/audio/transcriptions',{
+        method:'POST',
+        headers:{'Authorization':'Bearer '+openaiKey},
+        body:form
+      });
+      var d = await res.json();
+      if(d.text && d.text.trim()){
+        setTranscript('"'+d.text.trim()+'"', true);
+        await runCaptureText(d.text.trim());
+      } else {
+        setTranscript('Nao percebi. Tenta de novo.', false);
+      }
+    }catch(e){
+      setTranscript('Pressiona e fala', false);
+    }
+  } else if(_audioChunks.length === 0){
+    setTranscript('Pressiona e fala', false);
+  }
+}
+
+function setTranscript(text, hasText){
+  var el = document.getElementById('voice-transcript');
+  if(!el) return;
+  el.textContent = text;
+  el.dataset.text = hasText ? text.replace(/^"|"$/g,'') : '';
+  el.classList.toggle('has-text', hasText);
+}
+
 async function speakText(text, onDone){
-  if(!openaiKey || !text){ if(onDone) onDone(); return; }
+  if(!openaiKey||!text) return;
   try{
     var res = await fetch('https://api.openai.com/v1/audio/speech',{
-      method: 'POST',
-      headers: {'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-      body: JSON.stringify({model:'tts-1-hd', input:text, voice:'nova', speed:0.9})
+      method:'POST',
+      headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
+      body:JSON.stringify({model:'tts-1-hd',input:text,voice:'nova',speed:1.05})
     });
     if(!res.ok) throw new Error('TTS '+res.status);
     var ab = await res.arrayBuffer();
     var ctx = getAudioCtx();
     var buf = await ctx.decodeAudioData(ab);
     var src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ctx.destination);
-    src.start(0);
+    src.buffer=buf; src.connect(ctx.destination); src.start(0);
     src.onended = function(){ if(onDone) onDone(); };
-  } catch(e){
-    console.error('TTS error:', e);
-    if(onDone) onDone();
-  }
+  }catch(e){ if(onDone) onDone(); }
 }
 
 async function speakBriefing(){
@@ -941,222 +1053,133 @@ async function speakBriefing(){
   var todayL = active.filter(function(l){ return l.followup===today(); }).length;
   var inactive = active.filter(function(l){ var d=daysSince(l.last_interaction||(l.created_at&&l.created_at.split('T')[0])); return d!==null&&d>=14; }).length;
   var text = 'Bom dia Samuel. ';
-  if(overdue > 0) text += overdue + (overdue===1?' lead em atraso. ':' leads em atraso. ');
-  if(todayL > 0) text += todayL + (todayL===1?' follow-up para hoje. ':' follow-ups para hoje. ');
-  if(inactive > 0) text += inactive + (inactive===1?' lead sem contacto. ':' leads sem contacto. ');
-  if(!overdue && !todayL && !inactive) text += 'Tudo em dia.';
-  if(btn){ btn.textContent='🔊 A falar...'; btn.disabled=true; }
-  await speakText(text, function(){
-    if(btn){ btn.textContent='🔊 Ouvir'; btn.disabled=false; }
-  });
+  if(overdue>0) text+=overdue+(overdue===1?' lead em atraso. ':' leads em atraso. ');
+  if(todayL>0) text+=todayL+(todayL===1?' follow-up para hoje. ':' follow-ups para hoje. ');
+  if(inactive>0) text+=inactive+(inactive===1?' lead sem contacto. ':' leads sem contacto. ');
+  if(overdue===0&&todayL===0&&inactive===0) text+='Tudo em dia.';
+  if(btn) btn.textContent='A falar...';
+  await speakText(text, function(){ if(btn) btn.textContent='Ouvir'; });
 }
 
-// ── VOICE CAPTURE ─────────────────────────────────────────────────────────────
-var _voiceActive = false;
-var _voiceTranscript = '';
 
-function handleMicTouch(e, type){
-  // Don't preventDefault - iOS needs the gesture for mic permission
-  if(type === 'start') startVoice();
-  else stopVoice();
-}
 
-function setVoiceState(state){
-  var btn = document.getElementById('mic-btn');
-  var ring = document.getElementById('mic-ring');
-  var label = document.getElementById('mic-label');
-  var card = document.getElementById('voice-card');
-  var tr = document.getElementById('voice-transcript');
-  if(state === 'listening'){
-    if(btn) btn.classList.add('listening');
-    if(ring) ring.classList.add('pulse');
-    if(label){ label.textContent='a ouvir...'; label.classList.add('listening'); }
-    if(card) card.classList.add('listening');
-    if(tr){ tr.textContent='A ouvir...'; tr.classList.remove('has-text'); }
-    startWave();
-  } else {
-    if(btn) btn.classList.remove('listening');
-    if(ring) ring.classList.remove('pulse');
-    if(label){ label.textContent='mantém premido para falar'; label.classList.remove('listening'); }
-    if(card) card.classList.remove('listening');
-    stopWave();
-  }
-}
-
-function startVoice(e){
-  if(_voiceActive) return;
-  getAudioCtx();
-  _voiceActive = true;
-  _voiceTranscript = '';
-  setVoiceState('listening');
-
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){
-    var tr = document.getElementById('voice-transcript');
-    if(tr) tr.textContent = 'Não suportado neste browser.';
-    _voiceActive = false;
-    setVoiceState('idle');
-    return;
-  }
-
-  var rec = new SR();
-  rec.lang = 'pt-PT';
-  rec.continuous = true;
-  rec.interimResults = true;
-
-  rec.onresult = function(e){
-    var txt = '';
-    for(var i = 0; i < e.results.length; i++){
-      txt += e.results[i][0].transcript;
-    }
-    _voiceTranscript = txt;
-    var tr = document.getElementById('voice-transcript');
-    if(tr){ tr.textContent = '"' + txt + '"'; tr.classList.add('has-text'); }
-  };
-
-  rec.onerror = function(ev){
-    if(ev.error === 'no-speech') return;
-    _voiceActive = false;
-    setVoiceState('idle');
-  };
-
-  window._currentRec = rec;
-  try{ rec.start(); console.log('SR started'); } catch(err){ console.log('SR start error:', err); _voiceActive = false; setVoiceState('idle'); }
-}
-
-function stopVoice(e){
-  if(!_voiceActive) return;
-  _voiceActive = false;
-  setVoiceState('idle');
-  if(window._currentRec){
-    try{ window._currentRec.stop(); } catch(err){}
-    window._currentRec = null;
-  }
-  var txt = _voiceTranscript.trim();
-  if(txt){
-    dispatchCapture(txt);
-  } else {
-    var tr = document.getElementById('voice-transcript');
-    if(tr){ tr.textContent = 'Pressiona e fala'; tr.classList.remove('has-text'); }
-  }
-}
-
-// ── TEXT INPUT ────────────────────────────────────────────────────────────────
 function sendText(){
-  var el = document.getElementById('capture-text');
-  if(!el || !el.value.trim()) return;
-  var txt = el.value.trim();
-  el.value = '';
-  el.style.height = '40px';
-  dispatchCapture(txt);
+  var el=document.getElementById('capture-text');
+  if(!el||!el.value.trim()) return;
+  runCaptureText(el.value.trim());
+  el.value=''; el.style.height='40px';
 }
+// ─── CONVERSATIONAL CAPTURE ──────────────────────────────────────────────────
+var captureConvHistory = [];
 
-// ── DISPATCH — entry point for both voice and text ───────────────────────────
-function dispatchCapture(txt){
-  if(!txt || !txt.trim()) return;
-  txt = txt.trim();
+async function runCapture(directText){
+  var ci = document.getElementById('capture-input');
+  var texto = directText || (ci ? ci.value.trim() : '');
+  if(!texto) return;
+  if(ci) ci.value='';
+  if(!apiKey){ addChatBubble('ai','Configura a API key nas Definicoes.'); return; }
 
-  // Show user bubble
-  addChatBubble('user', txt);
+  addChatBubble('user', texto);
+  $('capture-input').value = '';
+  $('btn-capture-send').disabled = true;
 
-  // Reset transcript
-  var tr = document.getElementById('voice-transcript');
-  if(tr){ tr.textContent = 'Pressiona e fala'; tr.classList.remove('has-text'); }
-
-  if(!apiKey){
-    addChatBubble('ai', 'Configura a Anthropic API key nas Definições.');
-    return;
-  }
-
-  processCapture(txt);
-}
-
-// ── AI CAPTURE ────────────────────────────────────────────────────────────────
-var _captureHistory = [];
-
-async function processCapture(txt){
-  console.log('processCapture called with:', txt);
   var leadsCtx = leads.slice(0,15).map(function(l){ return l.id+':'+l.company+'('+l.stage+')'; }).join(', ');
   var frentesCtx = frentes.map(function(f){ return f.id+':'+f.nome; }).join(', ');
-  var histCtx = _captureHistory.slice(-4).map(function(m){ return (m.role==='user'?'Samuel':'AI')+': '+m.content; }).join('\n');
+  var histCtx = captureConvHistory.slice(-4).map(function(m){ return (m.role==='user'?'Samuel':'Assistente')+': '+m.content; }).join('\n');
 
-  _captureHistory.push({role:'user', content:txt});
+  captureConvHistory.push({role:'user', content:texto});
 
-  var systemPrompt = 'You are the assistant of Samuel Constantino, CEO of Alitec (Portuguese food company).\n\nLeads: '+leadsCtx+'\nFronts: '+frentesCtx+'\nContext:\n'+histCtx+'\n\nRespond ONLY with valid JSON (no markdown, no text before/after):\n{"action":"create","tipo":"interacao_lead","destino_id":N,"destino_nome":"","texto":"","data":"YYYY-MM-DD"|null,"hora":"HH:MM"|null,"prioridade":"normal"}\nOR {"action":"create","tipo":"tarefa_frente","destino_id":N,"destino_nome":"","texto":"","data":"YYYY-MM-DD"|null,"prioridade":"normal"}\nOR {"action":"create","tipo":"update_frente","destino_id":N,"destino_nome":"","texto":""}\nOR {"action":"ask","pergunta":"short question in European Portuguese"}\n\nRules: create immediately if enough info. Only ask if critical info missing. Never ask the obvious.';
+  var systemPrompt = 'You are the assistant of Samuel Constantino, CEO of Alitec, a Portuguese food company. Samuel speaks to you to register things.\n\nExisting leads: '+leadsCtx+'\nActive fronts/projects: '+frentesCtx+'\n\nRules:\n1. If you have enough information, respond with a create action immediately.\n2. Only ask ONE short question if critical info is truly missing (e.g. a meeting with no date or time).\n3. Never ask obvious things. "Reuniao com Ruslan amanha as 10" has everything - create directly.\n4. Respond ONLY with valid JSON, nothing else.\n\nJSON formats:\n{"action":"create","tipo":"interacao_lead","destino_id":N,"destino_nome":"name","texto":"description","data":"YYYY-MM-DD","hora":"HH:MM","prioridade":"normal"}\n{"action":"create","tipo":"tarefa_frente","destino_id":N,"destino_nome":"name","texto":"task text","data":"YYYY-MM-DD","prioridade":"normal"}\n{"action":"create","tipo":"update_frente","destino_id":N,"destino_nome":"name","texto":"update text"}\n{"action":"ask","pergunta":"short question in European Portuguese"}\n\nRecent context:\n'+histCtx;
 
   try{
-    var msgs = _captureHistory.slice(-6).map(function(m){
+    var msgs = captureConvHistory.slice(-6).map(function(m){
       return {role: m.role==='ai'?'assistant':'user', content: m.content};
     });
     var res = await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001', max_tokens:400, system:systemPrompt, messages:msgs})
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:400,system:systemPrompt,messages:msgs})
     });
     var d = await res.json();
-    var raw = d.content && d.content[0] ? d.content[0].text : '';
-    var m = raw.match(/\{[\s\S]*?\}/);
+    var rawText = (d.content&&d.content[0]) ? d.content[0].text : '';
+    var jMatch = rawText.match(/\{[^{}]*\}/);
     var parsed = null;
-    if(m){ try{ parsed = JSON.parse(m[0]); }catch(e){} }
-    if(!parsed){ parsed = {action:'ask', pergunta:'Não percebi. Podes reformular?'}; }
-    await handleCapture(parsed, txt);
-  } catch(e){
+    if(jMatch){ try{ parsed = JSON.parse(jMatch[0]); }catch(e){ parsed = null; } }
+    if(!parsed){ parsed = {action:'ask', pergunta:'Nao percebi. Podes reformular?'}; }
+    await handleCaptureResponse(parsed, texto);
+  }catch(e){
     addChatBubble('ai', 'Erro: '+e.message);
   }
+  $('btn-capture-send').disabled = false;
 }
 
-async function handleCapture(parsed, original){
+async function handleCaptureResponse(parsed, original){
   if(parsed.action === 'ask'){
-    var q = parsed.pergunta || 'Não percebi.';
+    var q = parsed.pergunta || 'Nao percebi.';
     addChatBubble('ai', q);
-    _captureHistory.push({role:'ai', content:q});
+    captureConvHistory.push({role:'ai', content:q});
     if(openaiKey) speakText(q, null);
+    setTimeout(function(){ $('capture-input').focus(); }, 150);
     return;
   }
 
   if(parsed.action === 'create'){
+    var msg = '';
     var tipo = parsed.tipo;
     var id = parsed.destino_id;
     var nome = parsed.destino_nome || '';
-    var msg = '';
 
     if(tipo === 'interacao_lead'){
-      await db.from('interactions').insert({lead_id:id, date:parsed.data||today(), type:'outro', notes:parsed.texto||original});
-      await db.from('leads').update({last_interaction:today()}).eq('id',id);
-      var l = leads.find(function(x){return x.id==id;}); if(l) l.last_interaction=today();
-      msg = 'Registado em '+nome+'.';
+      var lead = leads.find(function(l){ return l.id == id; });
+      if(lead){
+        await db.from('interactions').insert({lead_id:id,date:parsed.data||today(),type:'outro',notes:parsed.texto||original});
+        await db.from('leads').update({last_interaction:today()}).eq('id',id);
+        var li = leads.find(function(x){ return x.id==id; }); if(li) li.last_interaction = today();
+        msg = 'Interaccao registada em '+nome+(parsed.data?' para '+parsed.data:'')+'.';
+      }
     } else if(tipo === 'tarefa_frente'){
-      await db.from('tarefas').insert({frente_id:id, texto:parsed.texto||original, prioridade:parsed.prioridade||'normal', data_limite:parsed.data||null, estado:'aberta'});
-      msg = 'Tarefa criada em '+nome+'.';
+      await db.from('tarefas').insert({frente_id:id,texto:parsed.texto||original,prioridade:parsed.prioridade||'normal',data_limite:parsed.data||null,estado:'aberta'});
+      msg = 'Tarefa criada em '+nome+(parsed.data?' para '+parsed.data:'')+'.';
     } else if(tipo === 'update_frente'){
-      await db.from('frente_updates').insert({frente_id:id, texto:parsed.texto||original});
-      msg = 'Update em '+nome+'.';
+      await db.from('frente_updates').insert({frente_id:id,texto:parsed.texto||original});
+      msg = 'Update registado em '+nome+'.';
     }
 
     if(parsed.data && parsed.hora){
-      window._pendingCal = {title:nome, date:parsed.data, time:parsed.hora, desc:parsed.texto||original};
-      addChatBubbleWithBtn('ai', msg+' Adicionar ao calendário?', '+ Agenda', 'doCalendar()');
+      msg += ' Queres adicionar ao calendario?';
+      window._pendingCal = {title:nome,date:parsed.data,time:parsed.hora,desc:parsed.texto||original};
+      addChatBubbleWithBtn('ai', msg, '+ Agenda', 'doCalendar()');
     } else {
       addChatBubble('ai', msg);
     }
 
-    _captureHistory.push({role:'ai', content:msg});
+    captureConvHistory.push({role:'ai', content:msg});
     if(openaiKey) speakText(msg, null);
     loadFrente(); loadPriorities(); renderLeads();
 
+    // Auto-clear chat after 10s of no activity
     clearTimeout(window._chatTimer);
     window._chatTimer = setTimeout(function(){
-      _captureHistory = [];
-      var ch = document.getElementById('chat-history');
-      if(ch){ ch.style.opacity='0'; ch.style.transition='opacity .4s'; setTimeout(function(){ ch.innerHTML=''; ch.style.opacity=''; ch.style.transition=''; }, 400); }
-    }, 12000);
+      captureConvHistory = [];
+      var ch = $('chat-history');
+      if(!ch) return;
+      ch.style.transition = 'opacity .4s';
+      ch.style.opacity = '0';
+      setTimeout(function(){
+        ch.innerHTML = ''; ch.style.display = 'none';
+        ch.style.opacity = ''; ch.style.transition = '';
+        $('capture-card').classList.remove('has-chat');
+      }, 400);
+    }, 10000);
+    return;
   }
 }
 
 function addChatBubble(role, text){
-  var ch = document.getElementById('chat-history');
+  var ch = $('chat-history');
   if(!ch) return;
   ch.style.display = 'block';
+  $('capture-card').classList.add('has-chat');
   var div = document.createElement('div');
   div.className = 'chat-msg '+role;
   var bubble = document.createElement('div');
@@ -1168,12 +1191,13 @@ function addChatBubble(role, text){
 }
 
 function addChatBubbleWithBtn(role, text, btnLabel, btnAction){
-  var ch = document.getElementById('chat-history');
+  var ch = $('chat-history');
   if(!ch) return;
   ch.style.display = 'block';
+  $('capture-card').classList.add('has-chat');
   var div = document.createElement('div');
   div.className = 'chat-msg '+role;
-  div.innerHTML = '<div class="chat-bubble">'+text+' <button onclick="'+btnAction+'" style="background:var(--text);color:var(--bg);border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-family:inherit;cursor:pointer;margin-top:4px;display:inline-block;">'+btnLabel+'</button></div>';
+  div.innerHTML = '<div class="chat-bubble">'+text+' <button onclick="'+btnAction+'" style="background:var(--text);color:var(--bg);border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-family:inherit;cursor:pointer;margin-top:6px;display:inline-block;">'+btnLabel+'</button></div>';
   ch.appendChild(div);
   ch.scrollTop = ch.scrollHeight;
 }
@@ -1189,32 +1213,54 @@ function createCalendarEvent(title, date, time, description){
   var endH = parseInt(time.split(':')[0])+1;
   var endTm = (endH<10?'0':'')+endH+time.split(':')[1];
   var CRLF = '\r\n';
-  var ics = 'BEGIN:VCALENDAR'+CRLF+'VERSION:2.0'+CRLF+'BEGIN:VEVENT'+CRLF
+  var ics = 'BEGIN:VCALENDAR'+CRLF+'VERSION:2.0'+CRLF+'PRODID:-//AlitecOS//EN'+CRLF+'BEGIN:VEVENT'+CRLF
     +'DTSTART:'+dt+'T'+tm+'00'+CRLF+'DTEND:'+dt+'T'+endTm+'00'+CRLF
     +'SUMMARY:'+title+CRLF+'DESCRIPTION:'+(description||'')+CRLF
     +'END:VEVENT'+CRLF+'END:VCALENDAR';
   var blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
-  a.href=url; a.download='evento.ics';
+  a.href = url; a.download = 'evento.ics';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-function showFeedback(html, ok, raw){
-  var el = document.getElementById('capture-feedback');
-  if(!el) return;
-  el.style.color = ok===true?'var(--green)':ok===false?'var(--red)':'var(--text)';
-  if(raw) el.innerHTML = html; else el.textContent = html;
+function doPendingCapture(){
+  var p = window._pendingCapture;
+  if(p) confirmCapture(p.tipo, p.id, p.original, p.data, p.prio, p.hora);
+}
+
+async function confirmCapture(tipo, id, original, data_limite, prioridade, hora){
+  if(tipo==='interacao_lead'){
+    await db.from('interactions').insert({lead_id:id,date:today(),type:'outro',notes:original});
+    await db.from('leads').update({last_interaction:today()}).eq('id',id);
+    var l=leads.find(function(l){return l.id==id;}); if(l) l.last_interaction=today();
+  } else if(tipo==='tarefa_frente'){
+    await db.from('tarefas').insert({frente_id:id,texto:original,prioridade:prioridade||'normal',data_limite:data_limite||null,estado:'aberta'});
+  } else if(tipo==='update_frente'){
+    await db.from('frente_updates').insert({frente_id:id,texto:original});
+  }
+  $('capture-input').value='';
+  if(data_limite&&hora){
+    var destNome=tipo==='interacao_lead'?(leads.find(function(l){return l.id==id;})||{company:'Reuniao'}).company:'Tarefa';
+    window._pendingCal={title:destNome,date:data_limite,time:hora,desc:original};
+    showFeedback('Guardado. <button onclick="doCalendar()" style="background:var(--text);color:var(--bg);border:none;border-radius:6px;padding:5px 12px;font-size:13px;cursor:pointer;font-family:inherit;margin-left:8px;">+ Agenda iPhone</button>',true,true);
+    setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },6000);
+  } else {
+    showFeedback('Guardado.',true);
+    setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },1500);
+  }
+}
+
+
+function showFeedback(html,ok,raw){
+  var el=$('capture-feedback');
+  el.style.color=ok===true?'var(--green)':ok===false?'var(--red)':'var(--text)';
+  if(raw) el.innerHTML=html; else el.textContent=html;
   el.classList.add('show');
 }
-function hideFeedback(){
-  var el = document.getElementById('capture-feedback');
-  if(el) el.classList.remove('show');
-}
-
-
+function hideFeedback(){ $('capture-feedback').classList.remove('show'); }
 
 // ─── PRIORITIES ───────────────────────────────────────────────────────────────
 function loadPriorities(){
@@ -1559,18 +1605,10 @@ function copyEmail(){
 
 // ─── LEAD MODAL TABS ──────────────────────────────────────────────────────────
 function switchSTab(modal,name,btnEl){
-  var tabs=Array.from(document.querySelectorAll('#modal-'+modal+' .stab'));
-  var curIdx=tabs.findIndex(function(t){return t.classList.contains('active');});
-  var newIdx=tabs.indexOf(btnEl);
-  var goRight=newIdx>curIdx;
   document.querySelectorAll('#modal-'+modal+' .stab').forEach(function(t){t.classList.remove('active');});
-  document.querySelectorAll('#modal-'+modal+' .stab-pane').forEach(function(p){p.classList.remove('active','slide-left');});
+  document.querySelectorAll('#modal-'+modal+' .stab-pane').forEach(function(p){p.classList.remove('active');});
   btnEl.classList.add('active');
-  var pane=document.getElementById((modal==='lead'?'ltab':'ftab')+'-'+name);
-  if(pane){
-    pane.classList.add('active');
-    if(!goRight) pane.classList.add('slide-left');
-  }
+  $(( modal==='lead'?'ltab':'ftab')+'-'+name).classList.add('active');
   if(modal==='lead'&&name==='contactos') loadLeadContactos();
   if(modal==='lead'&&name==='historico') loadLeadHistorico();
   if(modal==='lead'&&name==='amostras') loadLeadAmostras();
@@ -1883,6 +1921,15 @@ async function savePushSub(sub){
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
+function sendTextCapture(){
+  var el = document.getElementById('capture-text');
+  if(!el || !el.value.trim()) return;
+  var txt = el.value.trim();
+  el.value = '';
+  addChatBubble('user', txt);
+  runCapture(txt);
+}
+
 async function init(){
   apiKey=localStorage.getItem('alitec-apikey')||'';
   openaiKey=localStorage.getItem('alitec-openai')||'';
