@@ -511,6 +511,27 @@ html,body{
 .empty-icon{font-size:36px;margin-bottom:10px;opacity:.4;}
 .empty-text{font-size:15px;letter-spacing:-.01em;}
 
+/* ── CHAT BUBBLES ────────────────────────────────────────── */
+.chat-msg{margin-bottom:8px;display:flex;flex-direction:column;}
+.chat-msg.user{align-items:flex-end;}
+.chat-msg.ai{align-items:flex-start;}
+.chat-bubble{
+  max-width:85%;padding:8px 12px;border-radius:14px;
+  font-size:13px;line-height:1.5;
+}
+.chat-msg.user .chat-bubble{
+  background:var(--text);color:var(--bg);
+  border-radius:14px 14px 4px 14px;
+}
+.chat-msg.ai .chat-bubble{
+  background:var(--bg2);color:var(--text);
+  border-radius:14px 14px 14px 4px;
+}
+.chat-msg.ai .chat-bubble.thinking{
+  color:var(--text3);font-style:italic;
+}
+.capture-card.has-chat{border-color:var(--border-med);}
+
 /* ── ALERT ───────────────────────────────────────────────── */
 .alert{
   margin:8px 16px;padding:11px 14px;border-radius:var(--r);
@@ -585,14 +606,15 @@ html,body{
         </div>
 
         <div class="capture-wrap">
-          <div class="capture-card">
+          <div class="capture-card" id="capture-card">
+            <div id="chat-history" style="display:none;max-height:160px;overflow-y:auto;margin-bottom:10px;"></div>
             <div class="capture-row">
               <textarea class="capture-input" id="capture-input" placeholder="O que aconteceu? O que tens de fazer?"></textarea>
               <div class="capture-btns">
                 <button class="btn-circle btn-mic" id="btn-mic" onclick="toggleMic()">
                   <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
                 </button>
-                <button class="btn-circle btn-send" onclick="runCapture()">
+                <button class="btn-circle btn-send" id="btn-capture-send" onclick="runCapture()">
                   <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                 </button>
               </div>
@@ -787,10 +809,16 @@ html,body{
     </div>
     <div>
       <div class="section-label">API Keys</div>
-      <div class="card-solo" style="margin:0 16px 16px;">
+      <div class="card-solo" style="margin:0 16px 8px;">
         <div style="padding:14px 16px;">
           <label class="form-label">Anthropic API Key</label>
           <input class="form-input" type="password" id="s-apikey" placeholder="sk-ant-..." style="margin-top:6px;">
+        </div>
+      </div>
+      <div class="card-solo" style="margin:0 16px 16px;">
+        <div style="padding:14px 16px;">
+          <label class="form-label">OpenAI API Key (voz)</label>
+          <input class="form-input" type="password" id="s-openai" placeholder="sk-proj-..." style="margin-top:6px;">
         </div>
       </div>
       <div class="section-label">Briefing</div>
@@ -823,6 +851,9 @@ let leads = [], frentes = [], products = [];
 let currentLead = null, currentFrente = null;
 let activeLeadFilter = 'todos';
 let apiKey = localStorage.getItem('alitec-apikey') || '';
+let openaiKey = localStorage.getItem('alitec-openai') || '';
+let captureHistory = []; // conversation context for capture
+let captureContext = null; // pending action being clarified
 let briefingText = '';
 let recognition = null, isRecording = false;
 
@@ -957,38 +988,112 @@ function renderBriefingStats(){
     if(el){el.innerHTML=html;el.style.display='grid';}
   });
 }
-function speakBriefing(){
+async function speakBriefing(){
   if(!briefingText) return;
-  var synth=window.speechSynthesis;
-  if(synth.speaking){ synth.cancel(); $('btn-speak').textContent='Ouvir'; return; }
-  var speak=function(){
-    var u=new SpeechSynthesisUtterance(briefingText);
-    u.lang='pt-PT'; u.rate=0.9; u.pitch=1;
+  var btn=$('btn-speak');
+  // Generate a spoken version of the briefing
+  var active=leads.filter(function(l){return l.stage!=='ganho'&&l.stage!=='perdido';});
+  var overdue=active.filter(function(l){return l.followup&&daysDiff(l.followup)<0;}).length;
+  var todayL=active.filter(function(l){return l.followup===today();}).length;
+  var inactive=active.filter(function(l){var d=daysSince(l.last_interaction||(l.created_at&&l.created_at.split('T')[0]));return d!==null&&d>=14;}).length;
+  var spokenText='Bom dia Samuel. ';
+  if(overdue>0) spokenText+=overdue+(overdue===1?' lead em atraso. ':' leads em atraso. ');
+  if(todayL>0) spokenText+=todayL+(todayL===1?' follow-up para hoje. ':' follow-ups para hoje. ');
+  if(inactive>0) spokenText+=inactive+(inactive===1?' lead sem contacto ha mais de duas semanas. ':' leads sem contacto ha mais de duas semanas. ');
+  if(overdue===0&&todayL===0&&inactive===0) spokenText+='Tudo em dia. Boa semana.';
+  btn.textContent='A falar...';
+  if(openaiKey){
+    await speakText(spokenText);
+  } else {
+    var synth=window.speechSynthesis;
+    if(synth.speaking){synth.cancel();btn.textContent='Ouvir briefing';return;}
+    var u=new SpeechSynthesisUtterance(spokenText);
+    u.lang='pt-PT';u.rate=0.9;
     var voices=synth.getVoices();
-    var pt=voices.find(function(v){return v.lang.startsWith('pt-PT');})||voices.find(function(v){return v.lang.startsWith('pt');})||null;
+    var pt=voices.find(function(v){return v.lang.startsWith('pt');})||null;
     if(pt) u.voice=pt;
     synth.speak(u);
-    $('btn-speak').textContent='Parar';
-    u.onend=u.onerror=function(){ $('btn-speak').textContent='Ouvir'; };
-  };
-  if(synth.getVoices().length===0){
-    synth.addEventListener('voiceschanged',speak,{once:true});
-    setTimeout(function(){ if(!synth.speaking) speak(); },300);
-  } else { speak(); }
+    u.onend=u.onerror=function(){btn.textContent='Ouvir briefing';};
+  }
 }
 
 // ─── VOICE INPUT ──────────────────────────────────────────────────────────────
+// ─── VOICE ────────────────────────────────────────────────────────────────────
+var mediaRecorder=null, audioChunks=[];
+
 function toggleMic(){
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ alert('O teu browser nao suporta reconhecimento de voz.'); return; }
-  if(isRecording){ recognition.stop(); return; }
-  recognition=new SR();
-  recognition.lang='pt-PT'; recognition.continuous=false; recognition.interimResults=true;
-  recognition.onstart=function(){ isRecording=true; $('btn-mic').classList.add('recording'); };
-  recognition.onresult=function(e){ $('capture-input').value=Array.from(e.results).map(function(r){return r[0].transcript;}).join(''); };
-  recognition.onend=function(){ isRecording=false; $('btn-mic').classList.remove('recording'); };
-  recognition.onerror=function(){ isRecording=false; $('btn-mic').classList.remove('recording'); };
-  recognition.start();
+  if(isRecording){ stopRecording(); return; }
+  startRecording();
+}
+
+function startRecording(){
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+    mediaRecorder=new MediaRecorder(stream,{mimeType:'audio/webm'});
+    audioChunks=[];
+    mediaRecorder.ondataavailable=function(e){ if(e.data.size>0) audioChunks.push(e.data); };
+    mediaRecorder.onstop=function(){ transcribeAudio(); stream.getTracks().forEach(function(t){t.stop();}); };
+    mediaRecorder.start();
+    isRecording=true;
+    $('btn-mic').classList.add('recording');
+  }).catch(function(err){
+    // Fallback to browser speech recognition
+    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){ alert('Microfone nao disponivel.'); return; }
+    recognition=new SR();
+    recognition.lang='pt-PT'; recognition.continuous=false; recognition.interimResults=true;
+    recognition.onstart=function(){ isRecording=true; $('btn-mic').classList.add('recording'); };
+    recognition.onresult=function(e){ $('capture-input').value=Array.from(e.results).map(function(r){return r[0].transcript;}).join(''); };
+    recognition.onend=function(){ isRecording=false; $('btn-mic').classList.remove('recording'); };
+    recognition.onerror=function(){ isRecording=false; $('btn-mic').classList.remove('recording'); };
+    recognition.start();
+  });
+}
+
+function stopRecording(){
+  if(mediaRecorder&&mediaRecorder.state!=='inactive'){
+    mediaRecorder.stop();
+  }
+  isRecording=false;
+  $('btn-mic').classList.remove('recording');
+  $('btn-mic').style.opacity='0.5';
+}
+
+async function transcribeAudio(){
+  $('btn-mic').style.opacity='1';
+  if(!openaiKey){ alert('Configura a OpenAI API key nas Definicoes para usar voz melhorada.'); return; }
+  var blob=new Blob(audioChunks,{type:'audio/webm'});
+  var form=new FormData();
+  form.append('file',blob,'audio.webm');
+  form.append('model','whisper-1');
+  form.append('language','pt');
+  form.append('prompt','Alitec, Frutta Nature, BidFood, Makro, Sogenave, Aviludo, Continente, PRR, INOVFRUTTA');
+  try{
+    var res=await fetch('https://api.openai.com/v1/audio/transcriptions',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+openaiKey},
+      body:form
+    });
+    var d=await res.json();
+    if(d.text){ $('capture-input').value=d.text; runCapture(); }
+  }catch(e){ console.error('Whisper error:',e); }
+}
+
+// TTS via OpenAI
+async function speakText(text){
+  if(!openaiKey||!text) return;
+  try{
+    var res=await fetch('https://api.openai.com/v1/audio/speech',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
+      body:JSON.stringify({model:'tts-1-hd',input:text,voice:'nova',speed:1.0})
+    });
+    var ab=await res.arrayBuffer();
+    var ctx=new (window.AudioContext||window.webkitAudioContext)();
+    var buf=await ctx.decodeAudioData(ab);
+    var src=ctx.createBufferSource();
+    src.buffer=buf; src.connect(ctx.destination); src.start(0);
+    src.onended=function(){ $('btn-speak').textContent='Ouvir briefing'; };
+  }catch(e){ console.error('TTS error:',e); }
 }
 
 // ─── CAPTURE ──────────────────────────────────────────────────────────────────
@@ -1466,17 +1571,21 @@ document.querySelectorAll('.overlay').forEach(function(m){
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
 function openSettings(){
   $('s-apikey').value=apiKey;
+  $('s-openai').value=openaiKey;
   openModal('modal-settings');
 }
 
 async function saveSettings(){
   apiKey=$('s-apikey').value.trim();
+  openaiKey=$('s-openai').value.trim();
   localStorage.setItem('alitec-apikey',apiKey);
+  localStorage.setItem('alitec-openai',openaiKey);
   await db.from('settings').upsert([
     {key:'briefing_weekday',value:$('s-briefing-week').value},
     {key:'briefing_saturday',value:$('s-briefing-sat').value},
     {key:'briefing_sunday',value:$('s-briefing-sun').value},
-    {key:'anthropic_key',value:apiKey}
+    {key:'anthropic_key',value:apiKey},
+    {key:'openai_key',value:openaiKey}
   ],{onConflict:'key'});
   closeModal('modal-settings');
   var btn=$('btn-save-settings');
@@ -1491,16 +1600,32 @@ async function loadSettings(){
   if(m.briefing_saturday) $('s-briefing-sat').value=m.briefing_saturday;
   if(m.briefing_sunday) $('s-briefing-sun').value=m.briefing_sunday;
   if(!apiKey&&m.anthropic_key){apiKey=m.anthropic_key;localStorage.setItem('alitec-apikey',apiKey);}
+  if(!openaiKey&&m.openai_key){openaiKey=m.openai_key;localStorage.setItem('alitec-openai',openaiKey);}
 }
 
 // ─── PWA ──────────────────────────────────────────────────────────────────────
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('/sw.js').catch(console.error);
+  navigator.serviceWorker.register('/sw.js').then(function(reg){
+    // Request push permission after first load
+    if('PushManager' in window){
+      setTimeout(function(){ requestPushPermission(reg); }, 3000);
+    }
+  }).catch(console.error);
+}
+
+async function requestPushPermission(reg){
+  if(Notification.permission==='granted') return;
+  if(Notification.permission==='denied') return;
+  var perm=await Notification.requestPermission();
+  if(perm==='granted'){
+    console.log('Push notifications enabled');
+  }
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 async function init(){
   apiKey=localStorage.getItem('alitec-apikey')||'';
+  openaiKey=localStorage.getItem('alitec-openai')||'';
   setGreeting();
   await loadSettings();
   await Promise.all([loadLeads(),loadFrente()]);
