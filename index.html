@@ -362,6 +362,10 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
             </button>
           </div>
           <div class="mic-label" id="mic-label">mantém premido para falar</div>
+          <div style="margin-top:12px;display:flex;gap:8px;align-items:flex-end;">
+            <textarea id="capture-text" class="form-textarea" style="flex:1;min-height:40px;height:40px;padding:10px 12px;font-size:14px;resize:none;transition:height .2s;" placeholder="ou escreve aqui..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendText();}"></textarea>
+            <button class="btn btn-primary btn-sm" onclick="sendText()" style="height:40px;padding:0 16px;flex-shrink:0;">↑</button>
+          </div>
         </div>
       </div>
 
@@ -731,7 +735,6 @@ async function speakBriefing(){
   }
 }
 
-
 // ── WAVEFORM SETUP ──────────────────────────────────────────────────────────
 (function(){
   var wf = document.getElementById('waveform');
@@ -902,6 +905,711 @@ async function speakBriefing(){
   if(btn) btn.textContent='A falar...';
   await speakText(text, function(){ if(btn) btn.textContent='Ouvir'; });
 }
+
+
+
+function sendText(){
+  var el=document.getElementById('capture-text');
+  if(!el||!el.value.trim()) return;
+  runCaptureText(el.value.trim());
+  el.value=''; el.style.height='40px';
+}
+// ─── CONVERSATIONAL CAPTURE ──────────────────────────────────────────────────
+var captureConvHistory = [];
+
+async function runCapture(){
+  var texto = $('capture-input').value.trim();
+  if(!texto) return;
+  if(!apiKey){ addChatBubble('ai','Configura a API key nas Definicoes.'); return; }
+
+  addChatBubble('user', texto);
+  $('capture-input').value = '';
+  $('btn-capture-send').disabled = true;
+
+  var leadsCtx = leads.slice(0,15).map(function(l){ return l.id+':'+l.company+'('+l.stage+')'; }).join(', ');
+  var frentesCtx = frentes.map(function(f){ return f.id+':'+f.nome; }).join(', ');
+  var histCtx = captureConvHistory.slice(-4).map(function(m){ return (m.role==='user'?'Samuel':'Assistente')+': '+m.content; }).join('\n');
+
+  captureConvHistory.push({role:'user', content:texto});
+
+  var systemPrompt = 'You are the assistant of Samuel Constantino, CEO of Alitec, a Portuguese food company. Samuel speaks to you to register things.\n\nExisting leads: '+leadsCtx+'\nActive fronts/projects: '+frentesCtx+'\n\nRules:\n1. If you have enough information, respond with a create action immediately.\n2. Only ask ONE short question if critical info is truly missing (e.g. a meeting with no date or time).\n3. Never ask obvious things. "Reuniao com Ruslan amanha as 10" has everything - create directly.\n4. Respond ONLY with valid JSON, nothing else.\n\nJSON formats:\n{"action":"create","tipo":"interacao_lead","destino_id":N,"destino_nome":"name","texto":"description","data":"YYYY-MM-DD","hora":"HH:MM","prioridade":"normal"}\n{"action":"create","tipo":"tarefa_frente","destino_id":N,"destino_nome":"name","texto":"task text","data":"YYYY-MM-DD","prioridade":"normal"}\n{"action":"create","tipo":"update_frente","destino_id":N,"destino_nome":"name","texto":"update text"}\n{"action":"ask","pergunta":"short question in European Portuguese"}\n\nRecent context:\n'+histCtx;
+
+  try{
+    var msgs = captureConvHistory.slice(-6).map(function(m){
+      return {role: m.role==='ai'?'assistant':'user', content: m.content};
+    });
+    var res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:400,system:systemPrompt,messages:msgs})
+    });
+    var d = await res.json();
+    var rawText = (d.content&&d.content[0]) ? d.content[0].text : '';
+    var jMatch = rawText.match(/\{[^{}]*\}/);
+    var parsed = null;
+    if(jMatch){ try{ parsed = JSON.parse(jMatch[0]); }catch(e){ parsed = null; } }
+    if(!parsed){ parsed = {action:'ask', pergunta:'Nao percebi. Podes reformular?'}; }
+    await handleCaptureResponse(parsed, texto);
+  }catch(e){
+    addChatBubble('ai', 'Erro: '+e.message);
+  }
+  $('btn-capture-send').disabled = false;
+}
+
+async function handleCaptureResponse(parsed, original){
+  if(parsed.action === 'ask'){
+    var q = parsed.pergunta || 'Nao percebi.';
+    addChatBubble('ai', q);
+    captureConvHistory.push({role:'ai', content:q});
+    if(openaiKey) speakText(q, null);
+    setTimeout(function(){ $('capture-input').focus(); }, 150);
+    return;
+  }
+
+  if(parsed.action === 'create'){
+    var msg = '';
+    var tipo = parsed.tipo;
+    var id = parsed.destino_id;
+    var nome = parsed.destino_nome || '';
+
+    if(tipo === 'interacao_lead'){
+      var lead = leads.find(function(l){ return l.id == id; });
+      if(lead){
+        await db.from('interactions').insert({lead_id:id,date:parsed.data||today(),type:'outro',notes:parsed.texto||original});
+        await db.from('leads').update({last_interaction:today()}).eq('id',id);
+        var li = leads.find(function(x){ return x.id==id; }); if(li) li.last_interaction = today();
+        msg = 'Interaccao registada em '+nome+(parsed.data?' para '+parsed.data:'')+'.';
+      }
+    } else if(tipo === 'tarefa_frente'){
+      await db.from('tarefas').insert({frente_id:id,texto:parsed.texto||original,prioridade:parsed.prioridade||'normal',data_limite:parsed.data||null,estado:'aberta'});
+      msg = 'Tarefa criada em '+nome+(parsed.data?' para '+parsed.data:'')+'.';
+    } else if(tipo === 'update_frente'){
+      await db.from('frente_updates').insert({frente_id:id,texto:parsed.texto||original});
+      msg = 'Update registado em '+nome+'.';
+    }
+
+    if(parsed.data && parsed.hora){
+      msg += ' Queres adicionar ao calendario?';
+      window._pendingCal = {title:nome,date:parsed.data,time:parsed.hora,desc:parsed.texto||original};
+      addChatBubbleWithBtn('ai', msg, '+ Agenda', 'doCalendar()');
+    } else {
+      addChatBubble('ai', msg);
+    }
+
+    captureConvHistory.push({role:'ai', content:msg});
+    if(openaiKey) speakText(msg, null);
+    loadFrente(); loadPriorities(); renderLeads();
+
+    // Auto-clear chat after 10s of no activity
+    clearTimeout(window._chatTimer);
+    window._chatTimer = setTimeout(function(){
+      captureConvHistory = [];
+      var ch = $('chat-history');
+      if(!ch) return;
+      ch.style.transition = 'opacity .4s';
+      ch.style.opacity = '0';
+      setTimeout(function(){
+        ch.innerHTML = ''; ch.style.display = 'none';
+        ch.style.opacity = ''; ch.style.transition = '';
+        $('capture-card').classList.remove('has-chat');
+      }, 400);
+    }, 10000);
+    return;
+  }
+}
+
+function addChatBubble(role, text){
+  var ch = $('chat-history');
+  if(!ch) return;
+  ch.style.display = 'block';
+  $('capture-card').classList.add('has-chat');
+  var div = document.createElement('div');
+  div.className = 'chat-msg '+role;
+  var bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+  bubble.textContent = text;
+  div.appendChild(bubble);
+  ch.appendChild(div);
+  ch.scrollTop = ch.scrollHeight;
+}
+
+function addChatBubbleWithBtn(role, text, btnLabel, btnAction){
+  var ch = $('chat-history');
+  if(!ch) return;
+  ch.style.display = 'block';
+  $('capture-card').classList.add('has-chat');
+  var div = document.createElement('div');
+  div.className = 'chat-msg '+role;
+  div.innerHTML = '<div class="chat-bubble">'+text+' <button onclick="'+btnAction+'" style="background:var(--text);color:var(--bg);border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-family:inherit;cursor:pointer;margin-top:6px;display:inline-block;">'+btnLabel+'</button></div>';
+  ch.appendChild(div);
+  ch.scrollTop = ch.scrollHeight;
+}
+
+function doCalendar(){
+  var c = window._pendingCal;
+  if(c) createCalendarEvent(c.title, c.date, c.time, c.desc);
+}
+
+function createCalendarEvent(title, date, time, description){
+  var dt = date.replace(/-/g,'');
+  var tm = time.replace(':','');
+  var endH = parseInt(time.split(':')[0])+1;
+  var endTm = (endH<10?'0':'')+endH+time.split(':')[1];
+  var CRLF = '\r\n';
+  var ics = 'BEGIN:VCALENDAR'+CRLF+'VERSION:2.0'+CRLF+'PRODID:-//AlitecOS//EN'+CRLF+'BEGIN:VEVENT'+CRLF
+    +'DTSTART:'+dt+'T'+tm+'00'+CRLF+'DTEND:'+dt+'T'+endTm+'00'+CRLF
+    +'SUMMARY:'+title+CRLF+'DESCRIPTION:'+(description||'')+CRLF
+    +'END:VEVENT'+CRLF+'END:VCALENDAR';
+  var blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'evento.ics';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function doPendingCapture(){
+  var p = window._pendingCapture;
+  if(p) confirmCapture(p.tipo, p.id, p.original, p.data, p.prio, p.hora);
+}
+
+async function confirmCapture(tipo, id, original, data_limite, prioridade, hora){
+  if(tipo==='interacao_lead'){
+    await db.from('interactions').insert({lead_id:id,date:today(),type:'outro',notes:original});
+    await db.from('leads').update({last_interaction:today()}).eq('id',id);
+    var l=leads.find(function(l){return l.id==id;}); if(l) l.last_interaction=today();
+  } else if(tipo==='tarefa_frente'){
+    await db.from('tarefas').insert({frente_id:id,texto:original,prioridade:prioridade||'normal',data_limite:data_limite||null,estado:'aberta'});
+  } else if(tipo==='update_frente'){
+    await db.from('frente_updates').insert({frente_id:id,texto:original});
+  }
+  $('capture-input').value='';
+  if(data_limite&&hora){
+    var destNome=tipo==='interacao_lead'?(leads.find(function(l){return l.id==id;})||{company:'Reuniao'}).company:'Tarefa';
+    window._pendingCal={title:destNome,date:data_limite,time:hora,desc:original};
+    showFeedback('Guardado. <button onclick="doCalendar()" style="background:var(--text);color:var(--bg);border:none;border-radius:6px;padding:5px 12px;font-size:13px;cursor:pointer;font-family:inherit;margin-left:8px;">+ Agenda iPhone</button>',true,true);
+    setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },6000);
+  } else {
+    showFeedback('Guardado.',true);
+    setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },1500);
+  }
+}
+
+
+function showFeedback(html,ok,raw){
+  var el=$('capture-feedback');
+  el.style.color=ok===true?'var(--green)':ok===false?'var(--red)':'var(--text)';
+  if(raw) el.innerHTML=html; else el.textContent=html;
+  el.classList.add('show');
+}
+function hideFeedback(){ $('capture-feedback').classList.remove('show'); }
+
+// ─── PRIORITIES ───────────────────────────────────────────────────────────────
+function loadPriorities(){
+  var active=leads.filter(function(l){return l.stage!=='ganho'&&l.stage!=='perdido';});
+  var overdue=active.filter(function(l){return l.followup&&daysDiff(l.followup)<0;});
+  var todayL=active.filter(function(l){return l.followup===today();});
+  var inactive=active.filter(function(l){var d=daysSince(l.last_interaction||(l.created_at&&l.created_at.split('T')[0]));return d!==null&&d>=14;});
+  var od=overdue.length;
+  [$('sdb-overdue'),$('bnb-overdue')].forEach(function(b){if(b){b.textContent=od;b.style.display=od?'':'none';}});
+  var items=[];
+  overdue.slice(0,3).forEach(function(l){items.push({dot:'red',title:l.company,sub:'Follow-up atrasado '+Math.abs(daysDiff(l.followup))+'d',id:l.id});});
+  todayL.slice(0,2).forEach(function(l){items.push({dot:'orange',title:l.company,sub:'Follow-up hoje',id:l.id});});
+  inactive.slice(0,2).forEach(function(l){items.push({dot:'orange',title:l.company,sub:'Sem contacto ha '+daysSince(l.last_interaction||(l.created_at&&l.created_at.split('T')[0]))+'d',id:l.id});});
+  var el=$('priority-list');
+  if(!items.length){el.innerHTML='<div class="priority-item"><div class="pi-dot green"></div><div class="pi-content"><div class="pi-title">Tudo em dia</div></div></div>';return;}
+  var html='';
+  items.forEach(function(item,i){
+    if(i>0) html+='<div class="sep"></div>';
+    html+='<div class="priority-item" onclick="openLead('+item.id+')">';
+    html+='<div class="pi-dot '+item.dot+'"></div>';
+    html+='<div class="pi-content"><div class="pi-title">'+h(item.title)+'</div><div class="pi-sub">'+h(item.sub)+'</div></div>';
+    html+='<svg class="pi-arrow" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>';
+  });
+  el.innerHTML=html;
+}
+
+// ─── LEADS ────────────────────────────────────────────────────────────────────
+async function loadLeads(){
+  var resp=await db.from('leads').select('*').order('created_at',{ascending:false});
+  leads=resp.data||[];
+  renderLeads();
+  loadPriorities();
+}
+
+function renderLeads(){
+  var filtered;
+  if(activeLeadFilter==='overdue') filtered=leads.filter(function(l){return l.followup&&daysDiff(l.followup)<0&&l.stage!=='ganho'&&l.stage!=='perdido';});
+  else if(activeLeadFilter==='ganho') filtered=leads.filter(function(l){return l.stage==='ganho';});
+  else if(activeLeadFilter==='todos') filtered=leads.filter(function(l){return l.stage!=='perdido';});
+  else filtered=leads.filter(function(l){return l.stage===activeLeadFilter;});
+  var el=$('leads-list');
+  if(!filtered.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">Sem leads nesta vista</div></div>';return;}
+  var html='';
+  filtered.forEach(function(l,i){
+    var diff=l.followup?daysDiff(l.followup):null;
+    var isOD=diff!==null&&diff<0&&l.stage!=='ganho'&&l.stage!=='perdido';
+    var ds=daysSince(l.last_interaction||(l.created_at&&l.created_at.split('T')[0]));
+    var isInact=ds!==null&&ds>=14&&l.stage!=='ganho'&&l.stage!=='perdido';
+    var fBadge='';
+    if(isOD) fBadge='<span class="badge b-overdue">Atrasado '+Math.abs(diff)+'d</span>';
+    else if(diff===0) fBadge='<span class="badge b-today">Hoje</span>';
+    else if(diff!==null&&diff<=3) fBadge='<span class="badge b-soon">Em '+diff+'d</span>';
+    if(i>0) html+='<div class="sep"></div>';
+    html+='<div class="lead-card" onclick="openLead('+l.id+')">';
+    html+='<div class="lead-name">'+h(l.company)+'</div>';
+    html+='<div class="lead-meta">'+h([mktL[l.market]||l.market,l.product].filter(Boolean).join(' · '))+'</div>';
+    html+='<div class="lead-badges"><span class="badge b-'+l.stage+'">'+(stageL[l.stage]||l.stage)+'</span>'+fBadge+(isInact?'<span class="badge b-inactive">'+ds+'d sem contacto</span>':'')+'</div>';
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+
+function setFilter(f,el){
+  activeLeadFilter=f;
+  document.querySelectorAll('.page #page-pipeline .badge').forEach(function(b){b.style.opacity='.6';b.style.fontWeight='500';});
+  el.style.opacity='1'; el.style.fontWeight='700';
+  renderLeads();
+}
+
+async function openLead(id){
+  var l=leads.find(function(l){return l.id===id;});
+  if(!l){var resp=await db.from('leads').select('*').eq('id',id).single();if(resp.data){leads.push(resp.data);l=resp.data;}else return;}
+  currentLead=l;
+  $('ml-title').textContent=l.company;
+  $('ml-sub').textContent=[mktL[l.market],l.product,stageL[l.stage]].filter(Boolean).join(' · ');
+  renderLeadResumo();
+  document.querySelectorAll('#modal-lead .stab').forEach(function(t,i){t.classList.toggle('active',i===0);});
+  document.querySelectorAll('#modal-lead .stab-pane').forEach(function(p,i){p.classList.toggle('active',i===0);});
+  $('email-result-wrap').style.display='none';
+  openModal('modal-lead');
+}
+
+function renderLeadResumo(){
+  var l=currentLead;
+  var stageOpts=Object.keys(stageL).map(function(v){return '<option value="'+v+'"'+(l.stage===v?' selected':'')+'>'+stageL[v]+'</option>';}).join('');
+  var mktOpts=Object.keys(mktL).map(function(v){return '<option value="'+v+'"'+(l.market===v?' selected':'')+'>'+mktL[v]+'</option>';}).join('');
+  $('ltab-resumo').innerHTML='<div style="padding:4px 20px 16px;">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">'
+    +'<div><div class="form-label">Fase</div><select class="form-select" onchange="updateLead(\'stage\',this.value)">'+stageOpts+'</select></div>'
+    +'<div><div class="form-label">Mercado</div><select class="form-select" onchange="updateLead(\'market\',this.value)">'+mktOpts+'</select></div>'
+    +'<div><div class="form-label">Follow-up</div><input type="date" class="form-input" value="'+(l.followup||'')+'" onchange="updateLead(\'followup\',this.value)"></div>'
+    +'<div><div class="form-label">Produto</div><input class="form-input" value="'+(l.product||'')+'" onchange="updateLead(\'product\',this.value)" placeholder="produto em discussao"></div>'
+    +'</div>'
+    +'<div class="form-field"><div class="form-label">Notas</div><textarea class="form-textarea" onchange="updateLead(\'notes\',this.value)">'+(l.notes||'')+'</textarea></div>'
+    +'<button class="btn btn-destructive btn-sm" onclick="deleteLead()" style="margin-top:4px;">Remover lead</button>'
+    +'</div>';
+}
+
+async function updateLead(field,val){
+  if(!currentLead) return;
+  var update={};update[field]=val||null;
+  await db.from('leads').update(update).eq('id',currentLead.id);
+  currentLead[field]=val;
+  var l=leads.find(function(l){return l.id===currentLead.id;});if(l) l[field]=val;
+  $('ml-sub').textContent=[mktL[currentLead.market],currentLead.product,stageL[currentLead.stage]].filter(Boolean).join(' · ');
+  renderLeads(); loadPriorities();
+}
+
+async function deleteLead(){
+  if(!currentLead||!confirm('Remover este lead?')) return;
+  await db.from('leads').delete().eq('id',currentLead.id);
+  leads=leads.filter(function(l){return l.id!==currentLead.id;});
+  closeModal('modal-lead'); renderLeads(); loadPriorities();
+}
+
+async function addLead(){
+  var company=$('nl-company').value.trim();
+  if(!company) return;
+  var resp=await db.from('leads').insert({company:company,contact:$('nl-contact').value.trim(),product:$('nl-product').value.trim(),stage:$('nl-stage').value,market:$('nl-market').value,followup:$('nl-followup').value||null,notes:$('nl-notes').value.trim()}).select();
+  if(resp.data&&resp.data[0]){leads.unshift(resp.data[0]);renderLeads();loadPriorities();}
+  ['nl-company','nl-contact','nl-product','nl-notes'].forEach(function(id){$(id).value='';});
+  closeModal('modal-add-lead');
+}
+
+// ─── LEAD TABS ────────────────────────────────────────────────────────────────
+async function loadLeadContactos(){
+  var resp=await db.from('contacts').select('*').eq('lead_id',currentLead.id).order('created_at');
+  var data=resp.data||[];
+  var html='<div style="padding:4px 20px 16px;">';
+  data.forEach(function(c){
+    html+='<div style="padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<div style="font-size:15px;font-weight:500;">'+h(c.name)+(c.role?' <span style="font-weight:400;color:var(--text3)">'+h(c.role)+'</span>':'')+'</div>';
+    html+='<div style="font-size:13px;color:var(--text3);margin-top:3px;">'+h([c.email,c.phone].filter(Boolean).join(' / ')||'--')+'</div>';
+    html+='</div>';
+  });
+  if(!data.length) html+='<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem contactos.</div>';
+  html+='<div style="margin-top:14px;background:var(--bg2);border-radius:10px;padding:14px;">';
+  html+='<div class="form-label" style="margin-bottom:8px;">Novo contacto</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<input class="form-input" id="nc-name" placeholder="Nome"><input class="form-input" id="nc-role" placeholder="Cargo">';
+  html+='<input class="form-input" id="nc-email" placeholder="Email"><input class="form-input" id="nc-phone" placeholder="Telefone">';
+  html+='</div><button class="btn btn-primary btn-sm" onclick="addContact()">Adicionar</button></div></div>';
+  $('ltab-contactos').innerHTML=html;
+}
+
+async function addContact(){
+  var name=$('nc-name').value.trim(); if(!name) return;
+  await db.from('contacts').insert({lead_id:currentLead.id,name:name,role:$('nc-role').value.trim(),email:$('nc-email').value.trim(),phone:$('nc-phone').value.trim()});
+  loadLeadContactos();
+}
+
+async function loadLeadHistorico(){
+  var resp=await db.from('interactions').select('*').eq('lead_id',currentLead.id).order('date',{ascending:false});
+  var data=resp.data||[];
+  var html='<div style="padding:4px 20px 16px;">';
+  data.forEach(function(x){
+    html+='<div style="padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">';
+    html+='<span style="font-size:12px;background:var(--bg2);padding:2px 8px;border-radius:6px;color:var(--text3);">'+h(x.type)+'</span>';
+    html+='<span style="font-size:12px;color:var(--text3);">'+h(x.date)+'</span></div>';
+    html+='<div style="font-size:14px;line-height:1.4;">'+(x.notes?h(x.notes):'')+'</div></div>';
+  });
+  if(!data.length) html+='<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem historico.</div>';
+  html+='<div style="margin-top:14px;background:var(--bg2);border-radius:10px;padding:14px;">';
+  html+='<div class="form-label" style="margin-bottom:8px;">Registar interacao</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<select class="form-select" id="ni-type"><option value="email">Email</option><option value="call">Chamada</option><option value="reuniao">Reuniao</option><option value="whatsapp">WhatsApp</option><option value="outro">Outro</option></select>';
+  html+='<input type="date" class="form-input" id="ni-date" value="'+today()+'"/></div>';
+  html+='<textarea class="form-textarea" id="ni-notes" placeholder="o que foi discutido..." style="height:60px;margin-bottom:8px;"></textarea>';
+  html+='<button class="btn btn-primary btn-sm" onclick="addInteraction()">Guardar</button></div></div>';
+  $('ltab-historico').innerHTML=html;
+}
+
+async function addInteraction(){
+  var notes=$('ni-notes').value.trim();
+  var date=$('ni-date').value||today();
+  await db.from('interactions').insert({lead_id:currentLead.id,date:date,type:$('ni-type').value,notes:notes});
+  await db.from('leads').update({last_interaction:date}).eq('id',currentLead.id);
+  currentLead.last_interaction=date;
+  var l=leads.find(function(l){return l.id===currentLead.id;}); if(l) l.last_interaction=date;
+  loadLeadHistorico(); loadPriorities();
+}
+
+async function loadLeadAmostras(){
+  var resp=await db.from('samples').select('*').eq('lead_id',currentLead.id).order('sent_date',{ascending:false});
+  var data=resp.data||[];
+  var html='<div style="padding:4px 20px 16px;">';
+  data.forEach(function(x){
+    var badge=x.converted?'b-ganho':'b-contactado';
+    var label=x.converted?'Converteu':'Pendente';
+    html+='<div style="padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">';
+    html+='<span style="font-size:15px;font-weight:600;">'+h(x.products)+'</span>';
+    html+='<span class="badge '+badge+'">'+label+'</span></div>';
+    html+='<div style="font-size:12px;color:var(--text3);">'+(x.sent_date||'--')+'</div>';
+    if(x.feedback) html+='<div style="font-size:13px;margin-top:6px;">'+h(x.feedback)+'</div>';
+    html+='</div>';
+  });
+  if(!data.length) html+='<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem amostras.</div>';
+  html+='<div style="margin-top:14px;background:var(--bg2);border-radius:10px;padding:14px;">';
+  html+='<div class="form-field"><label class="form-label">Produto(s)</label><input class="form-input" id="sa-prod" placeholder="ex: Farinha BD 35mesh"/></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+  html+='<div class="form-field"><label class="form-label">Data envio</label><input type="date" class="form-input" id="sa-date"/></div>';
+  html+='<div class="form-field"><label class="form-label">Estado</label><select class="form-select" id="sa-conv"><option value="false">Pendente</option><option value="true">Converteu</option></select></div></div>';
+  html+='<div class="form-field"><label class="form-label">Feedback</label><textarea class="form-textarea" id="sa-fb" style="height:60px;"></textarea></div>';
+  html+='<button class="btn btn-secondary btn-sm btn-full" onclick="addAmostra()">Registar amostra</button></div></div>';
+  $('ltab-amostras').innerHTML=html;
+}
+
+async function addAmostra(){
+  var prod=$('sa-prod').value.trim(); if(!prod) return;
+  await db.from('samples').insert({lead_id:currentLead.id,products:prod,sent_date:$('sa-date').value||null,feedback:$('sa-fb').value.trim(),converted:$('sa-conv').value==='true'});
+  loadLeadAmostras();
+}
+
+// ─── EMAIL IA ─────────────────────────────────────────────────────────────────
+async function genEmail(){
+  if(!apiKey){alert('Configura a API key nas Definicoes.');return;}
+  var l=currentLead;
+  var ctx=$('email-ctx').value.trim();
+  var btn=$('btn-gen-email');
+  btn.textContent='A gerar...'; btn.disabled=true;
+  var prompt='Assistente comercial da Alitec (Frutta Nature).\nLead: '+l.company+' | '+(mktL[l.market]||l.market)+' | '+(l.product||'produtos Alitec')+' | Fase: '+(stageL[l.stage]||l.stage)+'\nNotas: '+(l.notes||'--')+'\n'+(ctx?'Contexto: '+ctx+'\n':'')+'\nGera email de follow-up. Tom direto e profissional. Portugues europeu. Inclui assunto. Assina como Samuel Constantino, Alitec.';
+  try{
+    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:800,messages:[{role:'user',content:prompt}]})});
+    var d=await res.json();
+    $('email-result').value=d.content&&d.content[0]?d.content[0].text:'Erro';
+    $('email-result-wrap').style.display='block';
+  } catch(e){alert('Erro: '+e.message);}
+  btn.textContent='Gerar email'; btn.disabled=false;
+}
+
+async function refineEmail(){
+  var inst=$('email-refine').value.trim();
+  var curr=$('email-result').value;
+  var prompt='Email anterior:\n'+curr+'\nRefinamento: '+(inst||'melhora');
+  try{
+    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:800,messages:[{role:'user',content:prompt}]})});
+    var d=await res.json();
+    $('email-result').value=d.content&&d.content[0]?d.content[0].text:'Erro';
+    $('email-refine').value='';
+  } catch(e){alert('Erro: '+e.message);}
+}
+
+function copyEmail(){
+  var txt=$('email-result').value;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).catch(function(){ $('email-result').select(); document.execCommand('copy'); });
+  } else { $('email-result').select(); document.execCommand('copy'); }
+}
+
+// ─── LEAD MODAL TABS ──────────────────────────────────────────────────────────
+function switchSTab(modal,name,btnEl){
+  document.querySelectorAll('#modal-'+modal+' .stab').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('#modal-'+modal+' .stab-pane').forEach(function(p){p.classList.remove('active');});
+  btnEl.classList.add('active');
+  $(( modal==='lead'?'ltab':'ftab')+'-'+name).classList.add('active');
+  if(modal==='lead'&&name==='contactos') loadLeadContactos();
+  if(modal==='lead'&&name==='historico') loadLeadHistorico();
+  if(modal==='lead'&&name==='amostras') loadLeadAmostras();
+  if(modal==='frente'&&name==='tarefas') loadFrenteTarefas();
+  if(modal==='frente'&&name==='updates') loadFrenteUpdates();
+}
+
+// ─── FRENTES ──────────────────────────────────────────────────────────────────
+async function loadFrente(){
+  var resp=await db.from('frentes').select('*').order('ordem');
+  frentes=resp.data||[];
+  var tresp=await db.from('tarefas').select('frente_id').eq('estado','aberta');
+  var counts={};
+  (tresp.data||[]).forEach(function(t){ counts[t.frente_id]=(counts[t.frente_id]||0)+1; });
+  var total=Object.values(counts).reduce(function(a,b){return a+b;},0);
+  [$('sdb-tarefas'),$('bnb-tarefas')].forEach(function(b){if(b){b.textContent=total;b.style.display=total?'':'none';}});
+  var html='';
+  frentes.forEach(function(f,i){
+    if(i>0) html+='<div class="sep"></div>';
+    html+='<div class="frente-card" onclick="openFrente('+f.id+')">';
+    html+='<div class="frente-row">';
+    html+='<div class="frente-icon-wrap">'+(f.icone||'📌')+'</div>';
+    html+='<div class="frente-info"><div class="frente-name">'+h(f.nome)+'</div><div class="frente-estado">'+(f.estado?h(f.estado):'Sem estado registado')+'</div></div>';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-left:auto;">';
+    if(counts[f.id]) html+='<span class="badge b-overdue">'+counts[f.id]+'</span>';
+    html+='<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>';
+    html+='</div></div>';
+  });
+  $('frentes-list').innerHTML=html||'<div class="empty-state"><div class="empty-text">Sem frentes</div></div>';
+}
+
+async function openFrente(id){
+  currentFrente=frentes.find(function(f){return f.id===id;});
+  if(!currentFrente) return;
+  $('mf-title').textContent=(currentFrente.icone||'')+' '+currentFrente.nome;
+  $('mf-estado').value=currentFrente.estado||'';
+  document.querySelectorAll('#modal-frente .stab').forEach(function(t,i){t.classList.toggle('active',i===0);});
+  document.querySelectorAll('#modal-frente .stab-pane').forEach(function(p,i){p.classList.toggle('active',i===0);});
+  await loadFrenteTarefas();
+  openModal('modal-frente');
+}
+
+async function saveFrenteEstado(){
+  if(!currentFrente) return;
+  var estado=$('mf-estado').value.trim();
+  await db.from('frentes').update({estado:estado,updated_at:new Date().toISOString()}).eq('id',currentFrente.id);
+  currentFrente.estado=estado;
+  var f=frentes.find(function(f){return f.id===currentFrente.id;}); if(f) f.estado=estado;
+  loadFrente();
+}
+
+async function loadFrenteTarefas(){
+  if(!currentFrente) return;
+  var resp=await db.from('tarefas').select('*').eq('frente_id',currentFrente.id).order('created_at',{ascending:false});
+  var data=resp.data||[];
+  var abertas=data.filter(function(t){return t.estado==='aberta';});
+  var fechadas=data.filter(function(t){return t.estado!=='aberta';});
+  var html='<div style="padding:4px 20px 16px;">';
+  html+='<button onclick="openAddTarefa('+currentFrente.id+')" class="btn btn-secondary btn-sm btn-full" style="margin-bottom:12px;">+ Nova tarefa</button>';
+  abertas.forEach(function(t){
+    var lim=t.data_limite?('<div style="font-size:12px;color:var(--text3);margin-top:2px;">Limite: '+t.data_limite+'</div>'):'';
+    var bold=t.prioridade==='alta'?'font-weight:600;':'';
+    var prio=t.prioridade==='alta'?'! ':'';
+    html+='<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<button onclick="closeTarefa('+t.id+')" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border-med);background:none;cursor:pointer;flex-shrink:0;margin-top:2px;"></button>';
+    html+='<div style="flex:1;"><div style="font-size:15px;'+bold+'">'+prio+h(t.texto)+'</div>'+lim+'</div>';
+    html+='<button onclick="deleteTarefa('+t.id+')" style="border:none;background:none;color:var(--text3);cursor:pointer;font-size:16px;padding:0 4px;">x</button>';
+    html+='</div>';
+  });
+  if(!abertas.length) html+='<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem tarefas abertas.</div>';
+  if(fechadas.length){
+    html+='<div style="font-size:12px;color:var(--text4);margin-top:12px;margin-bottom:4px;">CONCLUIDAS ('+fechadas.length+')</div>';
+    fechadas.slice(0,5).forEach(function(t){
+      html+='<div style="font-size:14px;text-decoration:line-through;color:var(--text4);padding:6px 0;">'+h(t.texto)+'</div>';
+    });
+  }
+  html+='</div>';
+  $('ftab-tarefas').innerHTML=html;
+}
+
+async function closeTarefa(id){
+  await db.from('tarefas').update({estado:'fechada'}).eq('id',id);
+  loadFrenteTarefas(); loadFrente();
+}
+async function deleteTarefa(id){
+  await db.from('tarefas').delete().eq('id',id);
+  loadFrenteTarefas(); loadFrente();
+}
+
+function openAddTarefa(frenteId){
+  var sel=$('nt-frente');
+  sel.innerHTML=frentes.map(function(f){return '<option value="'+f.id+'"'+(f.id===frenteId?' selected':'')+'>'+f.icone+' '+f.nome+'</option>';}).join('');
+  $('nt-texto').value=''; $('nt-data').value=''; $('nt-prio').value='normal';
+  openModal('modal-add-tarefa');
+}
+
+async function addTarefaGlobal(){
+  var texto=$('nt-texto').value.trim();
+  var fid=parseInt($('nt-frente').value);
+  if(!texto||!fid) return;
+  await db.from('tarefas').insert({frente_id:fid,texto:texto,prioridade:$('nt-prio').value,data_limite:$('nt-data').value||null,estado:'aberta'});
+  $('nt-texto').value=''; $('nt-data').value='';
+  closeModal('modal-add-tarefa');
+  if(currentFrente&&currentFrente.id===fid) loadFrenteTarefas();
+  loadFrente();
+}
+
+async function loadFrenteUpdates(){
+  if(!currentFrente) return;
+  var resp=await db.from('frente_updates').select('*').eq('frente_id',currentFrente.id).order('created_at',{ascending:false});
+  var data=resp.data||[];
+  var html='<div style="padding:4px 20px 16px;">';
+  html+='<div style="background:var(--bg2);border-radius:10px;padding:12px;margin-bottom:12px;">';
+  html+='<textarea class="form-textarea" id="fu-texto" placeholder="o que aconteceu, decisao tomada..." style="height:60px;margin-bottom:8px;"></textarea>';
+  html+='<button class="btn btn-primary btn-sm" onclick="addFrenteUpdate()">Guardar update</button></div>';
+  data.forEach(function(u){
+    var dt=new Date(u.created_at).toLocaleDateString('pt-PT',{day:'numeric',month:'long',year:'numeric'});
+    html+='<div style="padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<div style="font-size:12px;color:var(--text3);margin-bottom:4px;">'+dt+'</div>';
+    html+='<div style="font-size:15px;line-height:1.5;">'+h(u.texto)+'</div></div>';
+  });
+  if(!data.length) html+='<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem updates.</div>';
+  html+='</div>';
+  $('ftab-updates').innerHTML=html;
+}
+
+async function addFrenteUpdate(){
+  var texto=$('fu-texto').value.trim(); if(!texto||!currentFrente) return;
+  await db.from('frente_updates').insert({frente_id:currentFrente.id,texto:texto});
+  loadFrenteUpdates();
+}
+
+// ─── PRODUTOS ─────────────────────────────────────────────────────────────────
+async function loadProdutos(){
+  var resp=await db.from('products').select('*').order('name');
+  products=resp.data||[];
+  var el=$('produtos-list');
+  if(!products.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Sem produtos no catalogo</div></div>';return;}
+  var html='';
+  products.forEach(function(p,i){
+    var m=p.price_base&&p.cost?Math.round((p.price_base-p.cost)/p.price_base*100):null;
+    var mc=m===null?'color:var(--text3)':m>=40?'color:var(--green)':m>=25?'color:var(--orange)':'color:var(--red)';
+    if(i>0) html+='<div class="sep"></div>';
+    html+='<div class="product-card">';
+    html+='<div class="product-name">'+h(p.name)+'</div>';
+    html+='<div class="product-detail">'+h([p.reference,p.packaging].filter(Boolean).join(' / '))+'</div>';
+    if(p.price_base!=null) html+='<div class="product-price">'+p.price_base.toFixed(2)+' /kg'+(m!==null?'<span style="font-size:13px;margin-left:8px;'+mc+'">Margem '+m+'%</span>':'')+'</div>';
+    if(p.specs) html+='<div style="font-size:13px;color:var(--text3);margin-top:4px;line-height:1.4;">'+h(p.specs)+'</div>';
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+
+// ─── MODALS ───────────────────────────────────────────────────────────────────
+function openModal(id){ $(id).classList.add('open'); }
+function closeModal(id){ $(id).classList.remove('open'); }
+document.querySelectorAll('.overlay').forEach(function(m){
+  m.addEventListener('click',function(e){if(e.target===m)closeModal(m.id);});
+});
+
+// ─── SETTINGS ─────────────────────────────────────────────────────────────────
+function openSettings(){
+  $('s-apikey').value=apiKey;
+  $('s-openai').value=openaiKey;
+  openModal('modal-settings');
+}
+
+async function saveSettings(){
+  apiKey=$('s-apikey').value.trim();
+  openaiKey=$('s-openai').value.trim();
+  localStorage.setItem('alitec-apikey',apiKey);
+  localStorage.setItem('alitec-openai',openaiKey);
+  await db.from('settings').upsert([
+    {key:'briefing_weekday',value:$('s-briefing-week').value},
+    {key:'briefing_saturday',value:$('s-briefing-sat').value},
+    {key:'briefing_sunday',value:$('s-briefing-sun').value},
+    {key:'anthropic_key',value:apiKey},
+    {key:'openai_key',value:openaiKey}
+  ],{onConflict:'key'});
+  closeModal('modal-settings');
+  var btn=$('btn-save-settings');
+  if(btn){var orig=btn.textContent;btn.textContent='Guardado';setTimeout(function(){btn.textContent=orig;},2000);}
+  if(apiKey) loadBriefing();
+}
+
+async function loadSettings(){
+  var resp=await db.from('settings').select('*');
+  var m={};(resp.data||[]).forEach(function(r){m[r.key]=r.value;});
+  if(m.briefing_weekday) $('s-briefing-week').value=m.briefing_weekday;
+  if(m.briefing_saturday) $('s-briefing-sat').value=m.briefing_saturday;
+  if(m.briefing_sunday) $('s-briefing-sun').value=m.briefing_sunday;
+  if(!apiKey&&m.anthropic_key){apiKey=m.anthropic_key;localStorage.setItem('alitec-apikey',apiKey);}
+  if(!openaiKey&&m.openai_key){openaiKey=m.openai_key;localStorage.setItem('alitec-openai',openaiKey);}
+}
+
+// ─── PWA ──────────────────────────────────────────────────────────────────────
+const VAPID_PUBLIC_KEY = 'BKc7oxUq9i-R7zGEaTAvgdk1OVS6tDYl2pNOYIQ30FwMsd2jVWxJyD2AfYhk1Cik3bUYjDzra4ijFndb_BHzSTk';
+
+function urlBase64ToUint8Array(base64String) {
+  var padding = '='.repeat((4 - base64String.length % 4) % 4);
+  var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  var rawData = window.atob(base64);
+  var outputArray = new Uint8Array(rawData.length);
+  for (var i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+  return outputArray;
+}
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').then(function(reg){
+    if('PushManager' in window){
+      setTimeout(function(){ setupPush(reg); }, 4000);
+    }
+  }).catch(console.error);
+}
+
+async function setupPush(reg){
+  try{
+    var perm = await Notification.requestPermission();
+    if(perm !== 'granted') return;
+    var existing = await reg.pushManager.getSubscription();
+    if(existing){ await savePushSub(existing); return; }
+    var sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+    await savePushSub(sub);
+  }catch(e){ console.log('Push setup error:', e); }
+}
+
+async function savePushSub(sub){
+  var keys = sub.toJSON().keys;
+  await db.from('push_subscriptions').upsert({
+    endpoint: sub.endpoint,
+    p256dh: keys.p256dh,
+    auth: keys.auth
+  }, {onConflict: 'endpoint'});
+  console.log('Push subscription saved');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+async function init(){
+  apiKey=localStorage.getItem('alitec-apikey')||'';
+  openaiKey=localStorage.getItem('alitec-openai')||'';
+  setGreeting();
+  await loadSettings();
+  await Promise.all([loadLeads(),loadFrente()]);
+  await loadBriefing();
+}
+init();
 
 
 </script>
