@@ -88,20 +88,20 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 .topbar-btn:active { transform: scale(.88); }
 
 /* ── BOTTOM NAV ── */
-.bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 4px 0 calc(4px + var(--safe-b)); z-index: 100; }
+.bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 2px 0 calc(2px + var(--safe-b)); z-index: 100; }
 .bn-items { display: flex; justify-content: space-around; align-items: center; }
-.bn-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 9px; font-weight: 500; color: var(--text4); cursor: pointer; padding: 3px 10px; border: none; background: none; font-family: var(--font); position: relative; transition: color .2s; }
-.bn-item svg { width: 20px; height: 20px; transition: transform .28s var(--spring); }
-.bn-item.active { color: var(--red); font-size: 10px; font-weight: 700; }
-.bn-item.active svg { transform: scale(1.18); filter: drop-shadow(0 0 6px rgba(155,27,27,.25)); }
-.bn-item:active svg { transform: scale(.88); }
-.bn-dot { position: absolute; top: 1px; right: 8px; width: 7px; height: 7px; background: var(--red-mid); border-radius: 50%; border: 1.5px solid var(--surface); }
+.bn-item { display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 9px; font-weight: 500; color: var(--text4); cursor: pointer; padding: 4px 12px 3px; border: none; background: none; font-family: var(--font); position: relative; transition: color .2s; }
+.bn-item svg { width: 19px; height: 19px; transition: transform .28s var(--spring); }
+.bn-item.active { color: var(--red); font-weight: 700; }
+.bn-item.active svg { transform: scale(1.15); filter: drop-shadow(0 0 5px rgba(155,27,27,.2)); }
+.bn-item:active svg { transform: scale(.86); }
+.bn-dot { position: absolute; top: 2px; right: 8px; width: 6px; height: 6px; background: var(--red-mid); border-radius: 50%; border: 1.5px solid var(--surface); }
 
 @media(max-width:768px) {
   .sidebar { display: none; }
   .topbar { display: flex; }
   .bottom-nav { display: block; }
-  .page { padding-bottom: calc(66px + var(--safe-b)); }
+  .page { padding-bottom: calc(58px + var(--safe-b)); }
   .page-hero { padding-top: calc(16px + var(--safe-t)); }
 }
 
@@ -250,8 +250,8 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 .sheet-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .stab { flex: 1; min-width: fit-content; text-align: center; padding: 10px 8px; font-size: 13px; font-weight: 600; color: var(--text3); border: none; background: none; cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -1px; font-family: var(--font); transition: all .2s; white-space: nowrap; }
 .stab.active { color: var(--red); border-bottom-color: var(--red); }
-.stab-panes-wrap { position: relative; overflow: hidden; }
-.stab-pane { display: none; }
+.stab-panes-wrap { position: relative; }
+.stab-pane { display: none; min-height: 320px; }
 .stab-pane.active { display: block; animation: slide-in-right .25s var(--ease); }
 .stab-pane.slide-left { animation: slide-in-left .25s var(--ease); }
 @keyframes slide-in-right { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
@@ -413,11 +413,8 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 
 <!-- MAIN -->
 <div class="main">
-  <div class="topbar">
-    <div class="topbar-title" id="mobile-title" style="display:none;"></div>
-    <button class="topbar-btn" onclick="openSettings()" style="background:var(--surface);box-shadow:0 1px 8px rgba(0,0,0,.08);">
-      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-    </button>
+  <div class="topbar" style="display:none!important;" id="mobile-title-wrap">
+    <div id="mobile-title"></div>
   </div>
 
   <div class="page-wrap">
@@ -517,7 +514,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 
     <!-- FRENTES -->
     <div class="page" id="page-frentes">
-      <div style="padding:24px 20px 12px;">
+      <div style="padding:calc(16px + var(--safe-t)) 20px 12px;">
         <div class="page-title">Operações</div>
       </div>
       <div id="frentes-list"></div>
@@ -525,7 +522,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 
     <!-- PRODUTOS -->
     <div class="page" id="page-produtos">
-      <div style="padding:24px 20px 12px;">
+      <div style="padding:calc(16px + var(--safe-t)) 20px 12px;">
         <div class="page-title">Produtos <span>catálogo</span></div>
       </div>
       <div class="card-group" id="produtos-list"><div class="priority-item"><div class="p-dot amber"></div><div><div class="p-title" style="color:var(--text4)">A carregar...</div></div></div></div>
