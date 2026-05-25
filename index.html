@@ -472,6 +472,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
       <div class="voice-section">
         <div class="voice-card" id="voice-card">
           <div class="chat-history" id="chat-history"></div>
+          <input type="hidden" id="capture-input" value="">
           <div class="voice-transcript" id="voice-transcript">Pressiona e fala</div>
           <div class="waveform" id="waveform"></div>
           <div class="mic-wrap">
@@ -1028,10 +1029,9 @@ function stopVoiceUI(){
 }
 
 function submitCapture(txt){
-  addChatBubble('user', txt);
-  var ci = document.getElementById('capture-input');
-  if(ci) ci.value = txt;
-  setTimeout(function(){ runCapture(); }, 50);
+  if(!txt||!txt.trim()) return;
+  addChatBubble('user', txt.trim());
+  setTimeout(function(){ runCapture(txt.trim()); }, 50);
 }
 
 function setTranscript(text, hasText){
@@ -1098,9 +1098,11 @@ function sendText(){
 // ─── CONVERSATIONAL CAPTURE ──────────────────────────────────────────────────
 var captureConvHistory = [];
 
-async function runCapture(){
-  var texto = $('capture-input').value.trim();
+async function runCapture(textoDirecto){
+  var ci = document.getElementById('capture-input');
+  var texto = textoDirecto || (ci ? ci.value.trim() : '');
   if(!texto) return;
+  if(ci) ci.value = '';
   if(!apiKey){ addChatBubble('ai','Configura a API key nas Definicoes.'); return; }
 
   addChatBubble('user', texto);
