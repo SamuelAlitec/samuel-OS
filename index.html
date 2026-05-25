@@ -780,298 +780,295 @@ let activeLeadFilter = 'todos';
 let apiKey = localStorage.getItem('alitec-apikey') || '';
 let briefingText = '';
 let recognition = null, isRecording = false;
-let speechSynth = window.speechSynthesis;
 
-const stageL = {novo:'Novo',contactado:'Contactado',proposta:'Proposta',negociacao:'Negociação',ganho:'Ganho',perdido:'Perdido'};
-const mktL = {portugal:'Portugal',espanha:'Espanha',canada:'Canadá',eua:'EUA',outro:'Outro'};
+const stageL = {novo:'Novo',contactado:'Contactado',proposta:'Proposta',negociacao:'Negociacao',ganho:'Ganho',perdido:'Perdido'};
+const mktL = {portugal:'Portugal',espanha:'Espanha',canada:'Canada',eua:'EUA',outro:'Outro'};
+const pageTitles = {home:'Home',pipeline:'Pipeline',frentes:'Frentes',produtos:'Produtos'};
 
 function today(){ return new Date().toISOString().split('T')[0]; }
-function daysDiff(d){ if(!d)return null; const t=new Date();t.setHours(0,0,0,0);const x=new Date(d);x.setHours(0,0,0,0);return Math.round((x-t)/86400000); }
-function daysSince(d){ if(!d)return null; const t=new Date();t.setHours(0,0,0,0);const x=new Date(d);x.setHours(0,0,0,0);return Math.round((t-x)/86400000); }
+function daysDiff(d){ if(!d)return null; var t=new Date();t.setHours(0,0,0,0);var x=new Date(d);x.setHours(0,0,0,0);return Math.round((x-t)/86400000); }
+function daysSince(d){ if(!d)return null; var t=new Date();t.setHours(0,0,0,0);var x=new Date(d);x.setHours(0,0,0,0);return Math.round((t-x)/86400000); }
 function $(id){ return document.getElementById(id); }
+function el(tag,attrs,inner){ var e=document.createElement(tag); if(attrs) Object.keys(attrs).forEach(function(k){ e.setAttribute(k,attrs[k]); }); if(inner!==undefined) e.innerHTML=inner; return e; }
+function h(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ─── NAVIGATION ──────────────────────────────────────────────────────────────
-const pageTitles = {home:'Home',pipeline:'Pipeline',frentes:'Frentes',produtos:'Produtos',settings:'Definições'};
 function fabAction(){
-  const active = document.querySelector('.page.active');
+  var active=document.querySelector('.page.active');
   if(!active) return;
-  const id = active.id;
-  if(id==='page-pipeline') openModal('modal-add-lead');
-  else if(id==='page-frentes') openAddTarefa(frentes[0]?.id||null);
-  else if(id==='page-produtos') { /* future */ }
+  if(active.id==='page-pipeline') openModal('modal-add-lead');
+  else if(active.id==='page-frentes') openAddTarefa(frentes[0]?frentes[0].id:null);
 }
+
 function goPage(name, el){
-  const prev = document.querySelector('.page.active');
-  if(prev) { prev.style.opacity='0'; prev.style.transform='translateY(4px)'; prev.style.transition='opacity .15s,transform .15s'; setTimeout(()=>{ prev.classList.remove('active'); prev.style.opacity=''; prev.style.transform=''; prev.style.transition=''; startNewPage(name, el); }, 150); } 
-  else { startNewPage(name, el); }
+  var prev=document.querySelector('.page.active');
+  if(prev){
+    prev.style.opacity='0';
+    prev.style.transform='translateY(4px)';
+    prev.style.transition='opacity .15s,transform .15s';
+    setTimeout(function(){ prev.classList.remove('active'); prev.style.cssText=''; startPage(name); }, 150);
+  } else { startPage(name); }
 }
-function startNewPage(name, el){
-  document.querySelectorAll('.nav-item,.bn-item').forEach(b=>b.classList.remove('active'));
-  const p=$('page-'+name); p.style.opacity='0'; p.style.transform='translateY(6px)';
+
+function startPage(name){
+  document.querySelectorAll('.nav-item,.bn-item').forEach(function(b){ b.classList.remove('active'); });
+  var p=$('page-'+name);
+  if(!p) return;
+  p.style.opacity='0'; p.style.transform='translateY(6px)';
   p.classList.add('active');
-  document.querySelectorAll(`[data-page="${name}"]`).forEach(b=>b.classList.add('active'));
+  document.querySelectorAll('[data-page="'+name+'"]').forEach(function(b){ b.classList.add('active'); });
   $('mobile-title').textContent = pageTitles[name]||name;
-  requestAnimationFrame(()=>{ p.style.transition='opacity .2s,transform .2s'; p.style.opacity='1'; p.style.transform='translateY(0)'; setTimeout(()=>{ p.style.transition=''; p.style.opacity=''; p.style.transform=''; },220); });
-  $('fab').style.display = name==='home' ? 'none' : 'flex';
-  if(name==='pipeline'){ loadLeads(); $('fab').style.display='flex'; }
-  else if(name==='frentes'){ loadFrente(); $('fab').style.display='flex'; }
-  else if(name==='produtos'){ loadProdutos(); $('fab').style.display='flex'; }
-  else { // fab hidden by default via CSS display:none }
+  requestAnimationFrame(function(){
+    p.style.transition='opacity .22s,transform .22s';
+    p.style.opacity='1'; p.style.transform='translateY(0)';
+    setTimeout(function(){ p.style.cssText=''; }, 250);
+  });
+  $('fab').style.display=(name==='pipeline'||name==='frentes')?'flex':'none';
+  if(name==='pipeline') loadLeads();
+  else if(name==='frentes') loadFrente();
+  else if(name==='produtos') loadProdutos();
 }
 
 // ─── GREETING ─────────────────────────────────────────────────────────────────
 function setGreeting(){
-  const now = new Date();
-  const h = now.getHours();
-  
-  const greet = h<12?'Bom dia, Samuel':h<19?'Boa tarde, Samuel':'Boa noite, Samuel';
-  $('greeting').textContent = greet;
-  const days = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
-  const months = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
-  $('greeting-sub').textContent = `Hoje é ${days[now.getDay()]}, ${now.getDate()} de ${months[now.getMonth()]}`;
+  var now=new Date(), h=now.getHours();
+  var g=h<12?'Bom dia':h<19?'Boa tarde':'Boa noite';
+  $('greeting').textContent=g+', Samuel';
+  var days=['domingo','segunda-feira','terca-feira','quarta-feira','quinta-feira','sexta-feira','sabado'];
+  var months=['janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  $('greeting-sub').textContent='Hoje e '+days[now.getDay()]+', '+now.getDate()+' de '+months[now.getMonth()];
 }
 
 // ─── BRIEFING ─────────────────────────────────────────────────────────────────
 async function loadBriefing(){
-  if(!apiKey){ $('briefing-skeleton').style.display='none'; $('briefing-text').style.display='block'; $('briefing-text').textContent='Configura a API key da Anthropic nas definições para activar o briefing.'; return; }
+  if(!apiKey){
+    $('briefing-skeleton').style.display='none';
+    $('briefing-text').style.display='block';
+    $('briefing-text').textContent='Configura a API key nas Definicoes para activar o briefing.';
+    return;
+  }
   try{
-    // Gather data
-    const active = leads.filter(l=>l.stage!=='ganho'&&l.stage!=='perdido');
-    const overdue = active.filter(l=>l.followup&&daysDiff(l.followup)<0);
-    const today_ = active.filter(l=>l.followup===today());
-    const inactive = active.filter(l=>{const d=daysSince(l.last_interaction||l.created_at?.split('T')[0]);return d!==null&&d>=14;});
-    const {data:tarefas} = await db.from('tarefas').select('*,frentes(nome)').eq('estado','aberta').eq('prioridade','alta');
-    const dow = new Date().getDay();
-    const isSunday = dow===0;
-
-    const prompt = `És o assistente pessoal do Samuel Constantino, CEO da Alitec (empresa alimentar portuguesa).
-Gera um briefing matinal conciso para Samuel. Português europeu, direto, sem exageros.
-${isSunday?'É domingo — foca em preparar a semana que aí vem.':''}
-
-Dados:
-- Leads em atraso (${overdue.length}): ${overdue.slice(0,5).map(l=>l.company).join(', ')||'nenhum'}
-- Follow-ups hoje (${today_.length}): ${today_.slice(0,5).map(l=>l.company).join(', ')||'nenhum'}
-- Leads sem contacto +14d (${inactive.length}): ${inactive.slice(0,3).map(l=>l.company).join(', ')||'nenhum'}
-- Tarefas urgentes: ${(tarefas||[]).slice(0,5).map(t=>`${t.frentes?.nome}: ${t.texto}`).join(' | ')||'nenhuma'}
-
-Escreve 3-4 frases. Começa diretamente com o que é mais urgente. Sem saudações. Sem "Olá Samuel".`;
-
-    const res = await fetch('https://api.anthropic.com/v1/messages',{
+    var active=leads.filter(function(l){ return l.stage!=='ganho'&&l.stage!=='perdido'; });
+    var overdue=active.filter(function(l){ return l.followup&&daysDiff(l.followup)<0; });
+    var todayL=active.filter(function(l){ return l.followup===today(); });
+    var inactive=active.filter(function(l){ var d=daysSince(l.last_interaction||l.created_at&&l.created_at.split('T')[0]); return d!==null&&d>=14; });
+    var tarefasResp=await db.from('tarefas').select('*,frentes(nome)').eq('estado','aberta').eq('prioridade','alta');
+    var tarefas=tarefasResp.data||[];
+    var dow=new Date().getDay(), isSun=dow===0;
+    var prompt='Briefing matinal do Samuel Constantino, CEO da Alitec.\n';
+    if(isSun) prompt+='E domingo - foca em preparar a semana.\n';
+    prompt+='Leads em atraso ('+overdue.length+'): '+overdue.slice(0,5).map(function(l){return l.company;}).join(', ')+(overdue.length?'':'nenhum')+'.\n';
+    prompt+='Follow-ups hoje ('+todayL.length+'): '+todayL.slice(0,5).map(function(l){return l.company;}).join(', ')+(todayL.length?'':'nenhum')+'.\n';
+    prompt+='Sem contacto +14d ('+inactive.length+'): '+inactive.slice(0,3).map(function(l){return l.company;}).join(', ')+(inactive.length?'':'nenhum')+'.\n';
+    prompt+='Tarefas urgentes: '+tarefas.slice(0,5).map(function(t){return (t.frentes?t.frentes.nome:'?')+': '+t.texto;}).join(' | ')+(tarefas.length?'':'nenhuma')+'.\n';
+    prompt+='Escreve 3-4 frases directas. Sem saudacoes. Sem "Ola Samuel". Portugues europeu.';
+    var res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:300,messages:[{role:'user',content:prompt}]})
     });
-    const data = await res.json();
-    briefingText = data.content?.[0]?.text || 'Erro ao gerar briefing.';
-  }catch(e){ briefingText = 'Não foi possível gerar o briefing. Verifica a API key.'; }
+    var data=await res.json();
+    briefingText=data.content&&data.content[0]?data.content[0].text:'Erro ao gerar briefing.';
+  } catch(e){ briefingText='Nao foi possivel gerar o briefing. Verifica a API key.'; }
   $('briefing-skeleton').style.display='none';
   $('briefing-text').style.display='block';
-  $('briefing-text').textContent = briefingText;
+  $('briefing-text').textContent=briefingText;
+  $('briefing-footer').style.display='flex';
 }
 
 function speakBriefing(){
   if(!briefingText) return;
-  // iOS requires voices to be loaded - trigger on user gesture
-  if(speechSynth.speaking){ speechSynth.cancel(); $('btn-speak').textContent='🔊 Ouvir'; return; }
-  const speak = ()=>{
-    const u = new SpeechSynthesisUtterance(briefingText);
+  var synth=window.speechSynthesis;
+  if(synth.speaking){ synth.cancel(); $('btn-speak').textContent='Ouvir'; return; }
+  var speak=function(){
+    var u=new SpeechSynthesisUtterance(briefingText);
     u.lang='pt-PT'; u.rate=0.9; u.pitch=1;
-    // iOS fix: get voices after user gesture
-    const voices = speechSynth.getVoices();
-    const pt = voices.find(v=>v.lang.startsWith('pt-PT'))||voices.find(v=>v.lang.startsWith('pt'))||null;
+    var voices=synth.getVoices();
+    var pt=voices.find(function(v){return v.lang.startsWith('pt-PT');})||voices.find(function(v){return v.lang.startsWith('pt');})||null;
     if(pt) u.voice=pt;
-    speechSynth.speak(u);
-    $('btn-speak').textContent='⏹ Parar';
-    u.onend=u.onerror=()=>{ $('btn-speak').textContent='🔊 Ouvir'; };
+    synth.speak(u);
+    $('btn-speak').textContent='Parar';
+    u.onend=u.onerror=function(){ $('btn-speak').textContent='Ouvir'; };
   };
-  // iOS: voices may not be loaded yet
-  if(speechSynth.getVoices().length===0){
-    speechSynth.addEventListener('voiceschanged',speak,{once:true});
-    // fallback if voiceschanged never fires (some iOS versions)
-    setTimeout(()=>{ if(!speechSynth.speaking) speak(); },300);
+  if(synth.getVoices().length===0){
+    synth.addEventListener('voiceschanged',speak,{once:true});
+    setTimeout(function(){ if(!synth.speaking) speak(); },300);
   } else { speak(); }
 }
 
 // ─── VOICE INPUT ──────────────────────────────────────────────────────────────
 function toggleMic(){
-  const SpeechRec = window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SpeechRec){ alert('O teu browser não suporta reconhecimento de voz.'); return; }
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ alert('O teu browser nao suporta reconhecimento de voz.'); return; }
   if(isRecording){ recognition.stop(); return; }
-  recognition = new SpeechRec();
+  recognition=new SR();
   recognition.lang='pt-PT'; recognition.continuous=false; recognition.interimResults=true;
-  recognition.onstart=()=>{ isRecording=true; $('btn-mic').classList.add('recording'); };
-  recognition.onresult=(e)=>{
-    const t=Array.from(e.results).map(r=>r[0].transcript).join('');
-    $('capture-input').value=t;
-  };
-  recognition.onend=()=>{ isRecording=false; $('btn-mic').classList.remove('recording'); };
-  recognition.onerror=()=>{ isRecording=false; $('btn-mic').classList.remove('recording'); };
+  recognition.onstart=function(){ isRecording=true; $('btn-mic').classList.add('recording'); };
+  recognition.onresult=function(e){ $('capture-input').value=Array.from(e.results).map(function(r){return r[0].transcript;}).join(''); };
+  recognition.onend=function(){ isRecording=false; $('btn-mic').classList.remove('recording'); };
+  recognition.onerror=function(){ isRecording=false; $('btn-mic').classList.remove('recording'); };
   recognition.start();
 }
 
 // ─── CAPTURE ──────────────────────────────────────────────────────────────────
 async function runCapture(){
-  const texto = $('capture-input').value.trim();
+  var texto=$('capture-input').value.trim();
   if(!texto) return;
-  if(!apiKey){ showFeedback('Configura a API key nas definições.',false); return; }
-
+  if(!apiKey){ showFeedback('Configura a API key nas Definicoes.',false); return; }
   showFeedback('A classificar...',null);
-  const leadsCtx = leads.slice(0,12).map(l=>`${l.id}:${l.company}`).join(',');
-  const frentesCtx = frentes.map(f=>`${f.id}:${f.nome}`).join(',');
-
-  const prompt = `Classifica esta nota do Samuel Constantino da Alitec: "${texto}"
-Leads: ${leadsCtx||'nenhum'}
-Frentes: ${frentesCtx}
-Responde APENAS JSON válido:
-{"tipo":"interacao_lead"|"tarefa_frente"|"update_frente"|"incerto","confianca":"alta"|"baixa","destino_id":N|null,"destino_nome":"","acao":"","data_limite":"YYYY-MM-DD"|null,"prioridade":"alta"|"normal","pergunta":null|"pergunta se incerto"}
-Regras: empresa/cliente→interacao_lead; frente+ação futura→tarefa_frente; frente+aconteceu→update_frente`;
-
+  var leadsCtx=leads.slice(0,12).map(function(l){return l.id+':'+l.company;}).join(',');
+  var frentesCtx=frentes.map(function(f){return f.id+':'+f.nome;}).join(',');
+  var prompt='Classifica esta nota: "'+texto+'"\nLeads: '+(leadsCtx||'nenhum')+'\nFrentes: '+frentesCtx+'\nResponde APENAS JSON: {"tipo":"interacao_lead"|"tarefa_frente"|"update_frente"|"incerto","confianca":"alta"|"baixa","destino_id":N|null,"destino_nome":"","acao":"","data_limite":"YYYY-MM-DD"|null,"prioridade":"alta"|"normal","pergunta":null|"pergunta se incerto"}\nRegras: empresa/cliente=interacao_lead; frente+acao futura=tarefa_frente; frente+aconteceu=update_frente';
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:300,messages:[{role:'user',content:prompt}]})});
-    const d=await res.json();
-    const parsed=JSON.parse(d.content[0].text.replace(/```json|```/g,'').trim());
-    processCaptureResult(parsed, texto);
-  }catch(e){ showFeedback('Erro: '+e.message, false); }
+    var res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:300,messages:[{role:'user',content:prompt}]})
+    });
+    var d=await res.json();
+    var raw=d.content[0].text.replace(/```[\s\S]*?```/g,'').replace(/```/g,'').trim();
+    var parsed=JSON.parse(raw);
+    processCaptureResult(parsed,texto);
+  } catch(e){ showFeedback('Erro: '+e.message,false); }
 }
 
-function processCaptureResult(p, original){
+function processCaptureResult(p,original){
   if(p.confianca==='baixa'||p.tipo==='incerto'){
-    const btns = frentes.map(f=>`<button onclick="confirmCapture('${p.tipo==='incerto'?'tarefa_frente':p.tipo}',${f.id},'${original.replace(/'/g,"\\'")}',null,'normal')" style="display:inline-flex;padding:6px 12px;margin:3px;background:var(--surface2);border:1px solid var(--sep);border-radius:8px;font-size:13px;cursor:pointer;color:var(--text);font-family:inherit;">${f.nome}</button>`).join('');
-    showFeedback(`<strong>${p.pergunta||'Onde devo guardar isto?'}</strong><div style="margin-top:8px;">${btns}</div>`, null, true);
+    var btns='';
+    frentes.forEach(function(f){ btns+='<button onclick="confirmCapture(\''+(p.tipo==='incerto'?'tarefa_frente':p.tipo)+'\','+f.id+',\''+original.replace(/'/g,"\\'")+'\')" style="display:inline-flex;padding:6px 12px;margin:3px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;color:var(--text);font-family:inherit;">'+f.nome+'</button>'; });
+    showFeedback('<strong>'+(p.pergunta||'Onde devo guardar isto?')+'</strong><div style="margin-top:8px;">'+btns+'</div>',null,true);
     return;
   }
-  const tipoL={interacao_lead:'Interação registada no lead',tarefa_frente:'Tarefa criada na frente',update_frente:'Update registado na frente'};
-  showFeedback(`<strong style="color:var(--green)">✓ ${tipoL[p.tipo]||p.tipo}:</strong> ${p.destino_nome} — "${p.acao}"<br><div style="display:flex;gap:8px;margin-top:10px;"><button onclick="confirmCapture('${p.tipo}',${p.destino_id},'${original.replace(/'/g,"\\'")}','${p.data_limite||''}','${p.prioridade}')" style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">Confirmar</button><button onclick="hideFeedback()" style="padding:8px 16px;background:var(--surface2);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">Cancelar</button></div>`, null, true);
+  var tipoL={interacao_lead:'Interacao no lead',tarefa_frente:'Tarefa na frente',update_frente:'Update na frente'};
+  showFeedback('<strong style="color:var(--green)">Guardado como: '+(tipoL[p.tipo]||p.tipo)+'</strong> '+h(p.destino_nome)+' - "'+h(p.acao)+'"<br><div style="display:flex;gap:8px;margin-top:10px;"><button onclick="confirmCapture(\''+p.tipo+'\','+p.destino_id+',\''+original.replace(/'/g,"\\'")+'\',\''+( p.data_limite||'')+'\',\''+( p.prioridade||'normal')+'\')" style="padding:8px 16px;background:var(--text);color:var(--bg);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">Confirmar</button><button onclick="hideFeedback()" style="padding:8px 16px;background:var(--bg2);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">Cancelar</button></div>',null,true);
 }
 
-async function confirmCapture(tipo, id, original, data_limite, prioridade){
+async function confirmCapture(tipo,id,original,data_limite,prioridade){
   if(tipo==='interacao_lead'){
     await db.from('interactions').insert({lead_id:id,date:today(),type:'outro',notes:original});
     await db.from('leads').update({last_interaction:today()}).eq('id',id);
-    const l=leads.find(l=>l.id==id); if(l) l.last_interaction=today();
-  }else if(tipo==='tarefa_frente'){
+    var l=leads.find(function(l){return l.id==id;}); if(l) l.last_interaction=today();
+  } else if(tipo==='tarefa_frente'){
     await db.from('tarefas').insert({frente_id:id,texto:original,prioridade:prioridade||'normal',data_limite:data_limite||null,estado:'aberta'});
-  }else if(tipo==='update_frente'){
+  } else if(tipo==='update_frente'){
     await db.from('frente_updates').insert({frente_id:id,texto:original});
   }
   $('capture-input').value='';
-  showFeedback('✓ Guardado.',true);
-  setTimeout(hideFeedback,1500);
-  loadPriorities(); loadFrente();
+  showFeedback('Guardado.',true);
+  setTimeout(function(){ hideFeedback(); loadFrente(); loadPriorities(); },1200);
 }
 
-function showFeedback(html, ok, raw){
-  const el=$('capture-feedback');
-  el.style.display='block';
+function showFeedback(html,ok,raw){
+  var el=$('capture-feedback');
   el.style.color=ok===true?'var(--green)':ok===false?'var(--red)':'var(--text)';
   if(raw) el.innerHTML=html; else el.textContent=html;
+  el.classList.add('show');
 }
-function hideFeedback(){ $('capture-feedback').style.display='none'; }
+function hideFeedback(){ $('capture-feedback').classList.remove('show'); }
 
 // ─── PRIORITIES ───────────────────────────────────────────────────────────────
 function loadPriorities(){
-  const active=leads.filter(l=>l.stage!=='ganho'&&l.stage!=='perdido');
-  const overdue=active.filter(l=>l.followup&&daysDiff(l.followup)<0);
-  const todayL=active.filter(l=>l.followup===today());
-  const inactive=active.filter(l=>{const d=daysSince(l.last_interaction||l.created_at?.split('T')[0]);return d!==null&&d>=14;});
-
-  // badge counts
-  const od=overdue.length;
-  [$('sdb-overdue'),$('bnb-overdue')].forEach(b=>{if(b){b.textContent=od;b.style.display=od?'':'none';}});
-
-  const items=[];
-  overdue.slice(0,3).forEach(l=>items.push({dot:'red',title:l.company,sub:`Follow-up atrasado ${Math.abs(daysDiff(l.followup))}d`,action:()=>openLead(l.id)}));
-  todayL.slice(0,2).forEach(l=>items.push({dot:'orange',title:l.company,sub:'Follow-up hoje',action:()=>openLead(l.id)}));
-  inactive.slice(0,2).forEach(l=>items.push({dot:'orange',title:l.company,sub:`Sem contacto há ${daysSince(l.last_interaction||l.created_at?.split('T')[0])}d`,action:()=>openLead(l.id)}));
-
-  const el=$('priority-list');
-  if(!items.length){ el.innerHTML='<div class="priority-item"><div class="pi-dot green"></div><div class="pi-content"><div class="pi-title">Tudo em dia 🎉</div></div></div>'; return; }
-  el.innerHTML=items.map(i=>`<div class="priority-item" onclick="(${i.action.toString()})()">
-    <div class="pi-dot ${i.dot}"></div>
-    <div class="pi-content"><div class="pi-title">${i.title}</div><div class="pi-sub">${i.sub}</div></div>
-    <svg class="pi-arrow" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
-  </div>`).join('<div class="row-sep"></div>');
+  var active=leads.filter(function(l){return l.stage!=='ganho'&&l.stage!=='perdido';});
+  var overdue=active.filter(function(l){return l.followup&&daysDiff(l.followup)<0;});
+  var todayL=active.filter(function(l){return l.followup===today();});
+  var inactive=active.filter(function(l){var d=daysSince(l.last_interaction||(l.created_at&&l.created_at.split('T')[0]));return d!==null&&d>=14;});
+  var od=overdue.length;
+  [$('sdb-overdue'),$('bnb-overdue')].forEach(function(b){if(b){b.textContent=od;b.style.display=od?'':'none';}});
+  var items=[];
+  overdue.slice(0,3).forEach(function(l){items.push({dot:'red',title:l.company,sub:'Follow-up atrasado '+Math.abs(daysDiff(l.followup))+'d',id:l.id});});
+  todayL.slice(0,2).forEach(function(l){items.push({dot:'orange',title:l.company,sub:'Follow-up hoje',id:l.id});});
+  inactive.slice(0,2).forEach(function(l){items.push({dot:'orange',title:l.company,sub:'Sem contacto ha '+daysSince(l.last_interaction||(l.created_at&&l.created_at.split('T')[0]))+'d',id:l.id});});
+  var el=$('priority-list');
+  if(!items.length){el.innerHTML='<div class="priority-item"><div class="pi-dot green"></div><div class="pi-content"><div class="pi-title">Tudo em dia</div></div></div>';return;}
+  var html='';
+  items.forEach(function(item,i){
+    if(i>0) html+='<div class="sep"></div>';
+    html+='<div class="priority-item" onclick="openLead('+item.id+')">';
+    html+='<div class="pi-dot '+item.dot+'"></div>';
+    html+='<div class="pi-content"><div class="pi-title">'+h(item.title)+'</div><div class="pi-sub">'+h(item.sub)+'</div></div>';
+    html+='<svg class="pi-arrow" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>';
+  });
+  el.innerHTML=html;
 }
 
 // ─── LEADS ────────────────────────────────────────────────────────────────────
 async function loadLeads(){
-  const {data}=await db.from('leads').select('*').order('created_at',{ascending:false});
-  leads=data||[];
+  var resp=await db.from('leads').select('*').order('created_at',{ascending:false});
+  leads=resp.data||[];
   renderLeads();
   loadPriorities();
 }
 
 function renderLeads(){
-  let filtered;
-  if(activeLeadFilter==='overdue') filtered=leads.filter(l=>l.followup&&daysDiff(l.followup)<0&&l.stage!=='ganho'&&l.stage!=='perdido');
-  else if(activeLeadFilter==='ganho') filtered=leads.filter(l=>l.stage==='ganho');
-  else if(activeLeadFilter==='todos') filtered=leads.filter(l=>l.stage!=='perdido');
-  else filtered=leads.filter(l=>l.stage===activeLeadFilter);
-
-  const el=$('leads-list');
+  var filtered;
+  if(activeLeadFilter==='overdue') filtered=leads.filter(function(l){return l.followup&&daysDiff(l.followup)<0&&l.stage!=='ganho'&&l.stage!=='perdido';});
+  else if(activeLeadFilter==='ganho') filtered=leads.filter(function(l){return l.stage==='ganho';});
+  else if(activeLeadFilter==='todos') filtered=leads.filter(function(l){return l.stage!=='perdido';});
+  else filtered=leads.filter(function(l){return l.stage===activeLeadFilter;});
+  var el=$('leads-list');
   if(!filtered.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">Sem leads nesta vista</div></div>';return;}
-
-  el.innerHTML=filtered.map((l,i)=>{
-    const diff=l.followup?daysDiff(l.followup):null;
-    const isOD=diff!==null&&diff<0&&l.stage!=='ganho'&&l.stage!=='perdido';
-    const ds=daysSince(l.last_interaction||l.created_at?.split('T')[0]);
-    const isInact=ds!==null&&ds>=14&&l.stage!=='ganho'&&l.stage!=='perdido';
-    let fBadge='';
-    if(isOD) fBadge=`<span class="badge badge-overdue">Atrasado ${Math.abs(diff)}d</span>`;
-    else if(diff===0) fBadge='<span class="badge badge-today">Hoje</span>';
-    else if(diff!==null&&diff<=3) fBadge=`<span class="badge badge-soon">Em ${diff}d</span>`;
-    return `${i>0?'<div class="row-sep"></div>':''}<div class="lead-card" onclick="openLead(${l.id})">
-      <div class="lead-name">${l.company}</div>
-      <div class="lead-meta">${[mktL[l.market]||l.market,l.product].filter(Boolean).join(' · ')}</div>
-      <div class="lead-badges">
-        <span class="badge badge-${l.stage}">${stageL[l.stage]}</span>
-        ${fBadge}
-        ${isInact?`<span class="badge badge-inactive">${ds}d sem contacto</span>`:''}
-      </div>
-    </div>`;
-  }).join('');
+  var html='';
+  filtered.forEach(function(l,i){
+    var diff=l.followup?daysDiff(l.followup):null;
+    var isOD=diff!==null&&diff<0&&l.stage!=='ganho'&&l.stage!=='perdido';
+    var ds=daysSince(l.last_interaction||(l.created_at&&l.created_at.split('T')[0]));
+    var isInact=ds!==null&&ds>=14&&l.stage!=='ganho'&&l.stage!=='perdido';
+    var fBadge='';
+    if(isOD) fBadge='<span class="badge b-overdue">Atrasado '+Math.abs(diff)+'d</span>';
+    else if(diff===0) fBadge='<span class="badge b-today">Hoje</span>';
+    else if(diff!==null&&diff<=3) fBadge='<span class="badge b-soon">Em '+diff+'d</span>';
+    if(i>0) html+='<div class="sep"></div>';
+    html+='<div class="lead-card" onclick="openLead('+l.id+')">';
+    html+='<div class="lead-name">'+h(l.company)+'</div>';
+    html+='<div class="lead-meta">'+h([mktL[l.market]||l.market,l.product].filter(Boolean).join(' · '))+'</div>';
+    html+='<div class="lead-badges"><span class="badge b-'+l.stage+'">'+(stageL[l.stage]||l.stage)+'</span>'+fBadge+(isInact?'<span class="badge b-inactive">'+ds+'d sem contacto</span>':'')+'</div>';
+    html+='</div>';
+  });
+  el.innerHTML=html;
 }
 
 function setFilter(f,el){
   activeLeadFilter=f;
-  document.querySelectorAll('.section .badge').forEach(b=>{b.style.fontWeight='500';b.style.opacity='.6';});
-  el.style.fontWeight='700'; el.style.opacity='1';
+  document.querySelectorAll('.page #page-pipeline .badge').forEach(function(b){b.style.opacity='.6';b.style.fontWeight='500';});
+  el.style.opacity='1'; el.style.fontWeight='700';
   renderLeads();
 }
 
 async function openLead(id){
-  const l=leads.find(l=>l.id===id);
-  if(!l){const{data}=await db.from('leads').select('*').eq('id',id).single();if(data)leads.push(data),currentLead=data;else return;}
-  else currentLead=l;
-  $('ml-title').textContent=currentLead.company;
-  $('ml-sub').textContent=[mktL[currentLead.market],currentLead.product,stageL[currentLead.stage]].filter(Boolean).join(' · ');
+  var l=leads.find(function(l){return l.id===id;});
+  if(!l){var resp=await db.from('leads').select('*').eq('id',id).single();if(resp.data){leads.push(resp.data);l=resp.data;}else return;}
+  currentLead=l;
+  $('ml-title').textContent=l.company;
+  $('ml-sub').textContent=[mktL[l.market],l.product,stageL[l.stage]].filter(Boolean).join(' · ');
   renderLeadResumo();
-  document.querySelectorAll('#modal-lead .mtab').forEach((t,i)=>{t.classList.toggle('active',i===0);});
-  document.querySelectorAll('#modal-lead .mtab-pane').forEach((p,i)=>{p.classList.toggle('active',i===0);});
+  document.querySelectorAll('#modal-lead .stab').forEach(function(t,i){t.classList.toggle('active',i===0);});
+  document.querySelectorAll('#modal-lead .stab-pane').forEach(function(p,i){p.classList.toggle('active',i===0);});
   $('email-result-wrap').style.display='none';
   openModal('modal-lead');
 }
 
 function renderLeadResumo(){
-  const l=currentLead;
-  $('ltab-resumo').innerHTML=`
-  <div style="padding:4px 20px 16px;">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-      <div><div class="form-label">Fase</div><select class="form-select" onchange="updateLead('stage',this.value)">${Object.entries(stageL).map(([v,t])=>`<option value="${v}"${l.stage===v?' selected':''}>${t}</option>`).join('')}</select></div>
-      <div><div class="form-label">Mercado</div><select class="form-select" onchange="updateLead('market',this.value)">${Object.entries(mktL).map(([v,t])=>`<option value="${v}"${l.market===v?' selected':''}>${t}</option>`).join('')}</select></div>
-      <div><div class="form-label">Follow-up</div><input type="date" class="form-input" value="${l.followup||''}" onchange="updateLead('followup',this.value)"></div>
-      <div><div class="form-label">Produto</div><input class="form-input" value="${l.product||''}" onchange="updateLead('product',this.value)" placeholder="produto em discussão"></div>
-    </div>
-    <div class="form-field"><div class="form-label">Notas</div><textarea class="form-textarea" onchange="updateLead('notes',this.value)">${l.notes||''}</textarea></div>
-    <button class="btn btn-destructive btn-sm" onclick="deleteLead()" style="margin-top:4px;">Remover lead</button>
-  </div>`;
+  var l=currentLead;
+  var stageOpts=Object.keys(stageL).map(function(v){return '<option value="'+v+'"'+(l.stage===v?' selected':'')+'>'+stageL[v]+'</option>';}).join('');
+  var mktOpts=Object.keys(mktL).map(function(v){return '<option value="'+v+'"'+(l.market===v?' selected':'')+'>'+mktL[v]+'</option>';}).join('');
+  $('ltab-resumo').innerHTML='<div style="padding:4px 20px 16px;">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">'
+    +'<div><div class="form-label">Fase</div><select class="form-select" onchange="updateLead(\'stage\',this.value)">'+stageOpts+'</select></div>'
+    +'<div><div class="form-label">Mercado</div><select class="form-select" onchange="updateLead(\'market\',this.value)">'+mktOpts+'</select></div>'
+    +'<div><div class="form-label">Follow-up</div><input type="date" class="form-input" value="'+(l.followup||'')+'" onchange="updateLead(\'followup\',this.value)"></div>'
+    +'<div><div class="form-label">Produto</div><input class="form-input" value="'+(l.product||'')+'" onchange="updateLead(\'product\',this.value)" placeholder="produto em discussao"></div>'
+    +'</div>'
+    +'<div class="form-field"><div class="form-label">Notas</div><textarea class="form-textarea" onchange="updateLead(\'notes\',this.value)">'+(l.notes||'')+'</textarea></div>'
+    +'<button class="btn btn-destructive btn-sm" onclick="deleteLead()" style="margin-top:4px;">Remover lead</button>'
+    +'</div>';
 }
 
 async function updateLead(field,val){
   if(!currentLead) return;
-  await db.from('leads').update({[field]:val||null}).eq('id',currentLead.id);
+  var update={};update[field]=val||null;
+  await db.from('leads').update(update).eq('id',currentLead.id);
   currentLead[field]=val;
-  const l=leads.find(l=>l.id===currentLead.id); if(l) l[field]=val;
+  var l=leads.find(function(l){return l.id===currentLead.id;});if(l) l[field]=val;
   $('ml-sub').textContent=[mktL[currentLead.market],currentLead.product,stageL[currentLead.stage]].filter(Boolean).join(' · ');
   renderLeads(); loadPriorities();
 }
@@ -1079,189 +1076,230 @@ async function updateLead(field,val){
 async function deleteLead(){
   if(!currentLead||!confirm('Remover este lead?')) return;
   await db.from('leads').delete().eq('id',currentLead.id);
-  leads=leads.filter(l=>l.id!==currentLead.id);
+  leads=leads.filter(function(l){return l.id!==currentLead.id;});
   closeModal('modal-lead'); renderLeads(); loadPriorities();
 }
 
 async function addLead(){
-  const company=$('nl-company').value.trim();
+  var company=$('nl-company').value.trim();
   if(!company) return;
-  const {data}=await db.from('leads').insert({company,contact:$('nl-contact').value.trim(),product:$('nl-product').value.trim(),stage:$('nl-stage').value,market:$('nl-market').value,followup:$('nl-followup').value||null,notes:$('nl-notes').value.trim()}).select();
-  if(data?.[0]){leads.unshift(data[0]);renderLeads();loadPriorities();}
-  ['nl-company','nl-contact','nl-product','nl-notes'].forEach(id=>$(id).value='');
+  var resp=await db.from('leads').insert({company:company,contact:$('nl-contact').value.trim(),product:$('nl-product').value.trim(),stage:$('nl-stage').value,market:$('nl-market').value,followup:$('nl-followup').value||null,notes:$('nl-notes').value.trim()}).select();
+  if(resp.data&&resp.data[0]){leads.unshift(resp.data[0]);renderLeads();loadPriorities();}
+  ['nl-company','nl-contact','nl-product','nl-notes'].forEach(function(id){$(id).value='';});
   closeModal('modal-add-lead');
 }
 
-// LEAD TABS
+// ─── LEAD TABS ────────────────────────────────────────────────────────────────
 async function loadLeadContactos(){
-  const{data}=await db.from('contacts').select('*').eq('lead_id',currentLead.id).order('created_at');
-  $('ltab-contactos').innerHTML=`
-  <div style="padding:4px 20px 16px;">
-    ${(data||[]).map(c=>`<div style="padding:10px 0;border-bottom:1px solid var(--sep);">
-      <div style="font-size:15px;font-weight:500;">${c.name}${c.role?` <span style="font-weight:400;color:var(--text3)">· ${c.role}</span>`:''}</div>
-      <div style="font-size:13px;color:var(--text3);margin-top:3px;">${[c.email,c.phone].filter(Boolean).join(' · ')||'—'}</div>
-    </div>`).join('')}
-    ${(data||[]).length===0?'<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem contactos.</div>':''}
-    <div style="margin-top:12px;background:var(--surface2);border-radius:10px;padding:14px;">
-      <div class="form-label" style="margin-bottom:8px;">Novo contacto</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-        <input class="form-input" id="nc-name" placeholder="Nome"><input class="form-input" id="nc-role" placeholder="Cargo">
-        <input class="form-input" id="nc-email" placeholder="Email"><input class="form-input" id="nc-phone" placeholder="Telefone">
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="addContact()">Adicionar</button>
-    </div>
-  </div>`;
+  var resp=await db.from('contacts').select('*').eq('lead_id',currentLead.id).order('created_at');
+  var data=resp.data||[];
+  var html='<div style="padding:4px 20px 16px;">';
+  data.forEach(function(c){
+    html+='<div style="padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<div style="font-size:15px;font-weight:500;">'+h(c.name)+(c.role?' <span style="font-weight:400;color:var(--text3)">'+h(c.role)+'</span>':'')+'</div>';
+    html+='<div style="font-size:13px;color:var(--text3);margin-top:3px;">'+h([c.email,c.phone].filter(Boolean).join(' / ')||'--')+'</div>';
+    html+='</div>';
+  });
+  if(!data.length) html+='<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem contactos.</div>';
+  html+='<div style="margin-top:14px;background:var(--bg2);border-radius:10px;padding:14px;">';
+  html+='<div class="form-label" style="margin-bottom:8px;">Novo contacto</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<input class="form-input" id="nc-name" placeholder="Nome"><input class="form-input" id="nc-role" placeholder="Cargo">';
+  html+='<input class="form-input" id="nc-email" placeholder="Email"><input class="form-input" id="nc-phone" placeholder="Telefone">';
+  html+='</div><button class="btn btn-primary btn-sm" onclick="addContact()">Adicionar</button></div></div>';
+  $('ltab-contactos').innerHTML=html;
 }
 
 async function addContact(){
-  const name=$('nc-name').value.trim(); if(!name) return;
-  await db.from('contacts').insert({lead_id:currentLead.id,name,role:$('nc-role').value.trim(),email:$('nc-email').value.trim(),phone:$('nc-phone').value.trim()});
+  var name=$('nc-name').value.trim(); if(!name) return;
+  await db.from('contacts').insert({lead_id:currentLead.id,name:name,role:$('nc-role').value.trim(),email:$('nc-email').value.trim(),phone:$('nc-phone').value.trim()});
   loadLeadContactos();
 }
 
 async function loadLeadHistorico(){
-  const{data}=await db.from('interactions').select('*').eq('lead_id',currentLead.id).order('date',{ascending:false});
-  $('ltab-historico').innerHTML=`
-  <div style="padding:4px 20px 16px;">
-    ${(data||[]).map(x=>`<div style="padding:10px 0;border-bottom:1px solid var(--sep);">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-        <span style="font-size:12px;background:var(--surface2);padding:2px 8px;border-radius:6px;color:var(--text3);">${x.type}</span>
-        <span style="font-size:12px;color:var(--text3);">${x.date}</span>
-      </div>
-      <div style="font-size:14px;line-height:1.4;">${x.notes||''}</div>
-    </div>`).join('')}
-    ${(data||[]).length===0?'<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem histórico.</div>':''}
-    <div style="margin-top:12px;background:var(--surface2);border-radius:10px;padding:14px;">
-      <div class="form-label" style="margin-bottom:8px;">Registar interação</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-        <select class="form-select" id="ni-type"><option value="email">Email</option><option value="call">Chamada</option><option value="reunião">Reunião</option><option value="whatsapp">WhatsApp</option><option value="outro">Outro</option></select>
-        <input type="date" class="form-input" id="ni-date" value="${today()}">
-      </div>
-      <textarea class="form-textarea" id="ni-notes" placeholder="o que foi discutido..." style="height:60px;margin-bottom:8px;"></textarea>
-      <button class="btn btn-primary btn-sm" onclick="addInteraction()">Guardar</button>
-    </div>
-  </div>`;
+  var resp=await db.from('interactions').select('*').eq('lead_id',currentLead.id).order('date',{ascending:false});
+  var data=resp.data||[];
+  var html='<div style="padding:4px 20px 16px;">';
+  data.forEach(function(x){
+    html+='<div style="padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">';
+    html+='<span style="font-size:12px;background:var(--bg2);padding:2px 8px;border-radius:6px;color:var(--text3);">'+h(x.type)+'</span>';
+    html+='<span style="font-size:12px;color:var(--text3);">'+h(x.date)+'</span></div>';
+    html+='<div style="font-size:14px;line-height:1.4;">'+(x.notes?h(x.notes):'')+'</div></div>';
+  });
+  if(!data.length) html+='<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem historico.</div>';
+  html+='<div style="margin-top:14px;background:var(--bg2);border-radius:10px;padding:14px;">';
+  html+='<div class="form-label" style="margin-bottom:8px;">Registar interacao</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<select class="form-select" id="ni-type"><option value="email">Email</option><option value="call">Chamada</option><option value="reuniao">Reuniao</option><option value="whatsapp">WhatsApp</option><option value="outro">Outro</option></select>';
+  html+='<input type="date" class="form-input" id="ni-date" value="'+today()+'"/></div>';
+  html+='<textarea class="form-textarea" id="ni-notes" placeholder="o que foi discutido..." style="height:60px;margin-bottom:8px;"></textarea>';
+  html+='<button class="btn btn-primary btn-sm" onclick="addInteraction()">Guardar</button></div></div>';
+  $('ltab-historico').innerHTML=html;
 }
 
 async function addInteraction(){
-  const notes=$('ni-notes').value.trim();
-  const date=$('ni-date').value||today();
-  await db.from('interactions').insert({lead_id:currentLead.id,date,type:$('ni-type').value,notes});
+  var notes=$('ni-notes').value.trim();
+  var date=$('ni-date').value||today();
+  await db.from('interactions').insert({lead_id:currentLead.id,date:date,type:$('ni-type').value,notes:notes});
   await db.from('leads').update({last_interaction:date}).eq('id',currentLead.id);
   currentLead.last_interaction=date;
-  const l=leads.find(l=>l.id===currentLead.id); if(l) l.last_interaction=date;
+  var l=leads.find(function(l){return l.id===currentLead.id;}); if(l) l.last_interaction=date;
   loadLeadHistorico(); loadPriorities();
 }
 
-// EMAIL IA
+async function loadLeadAmostras(){
+  var resp=await db.from('samples').select('*').eq('lead_id',currentLead.id).order('sent_date',{ascending:false});
+  var data=resp.data||[];
+  var html='<div style="padding:4px 20px 16px;">';
+  data.forEach(function(x){
+    var badge=x.converted?'b-ganho':'b-contactado';
+    var label=x.converted?'Converteu':'Pendente';
+    html+='<div style="padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">';
+    html+='<span style="font-size:15px;font-weight:600;">'+h(x.products)+'</span>';
+    html+='<span class="badge '+badge+'">'+label+'</span></div>';
+    html+='<div style="font-size:12px;color:var(--text3);">'+(x.sent_date||'--')+'</div>';
+    if(x.feedback) html+='<div style="font-size:13px;margin-top:6px;">'+h(x.feedback)+'</div>';
+    html+='</div>';
+  });
+  if(!data.length) html+='<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem amostras.</div>';
+  html+='<div style="margin-top:14px;background:var(--bg2);border-radius:10px;padding:14px;">';
+  html+='<div class="form-field"><label class="form-label">Produto(s)</label><input class="form-input" id="sa-prod" placeholder="ex: Farinha BD 35mesh"/></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+  html+='<div class="form-field"><label class="form-label">Data envio</label><input type="date" class="form-input" id="sa-date"/></div>';
+  html+='<div class="form-field"><label class="form-label">Estado</label><select class="form-select" id="sa-conv"><option value="false">Pendente</option><option value="true">Converteu</option></select></div></div>';
+  html+='<div class="form-field"><label class="form-label">Feedback</label><textarea class="form-textarea" id="sa-fb" style="height:60px;"></textarea></div>';
+  html+='<button class="btn btn-secondary btn-sm btn-full" onclick="addAmostra()">Registar amostra</button></div></div>';
+  $('ltab-amostras').innerHTML=html;
+}
+
+async function addAmostra(){
+  var prod=$('sa-prod').value.trim(); if(!prod) return;
+  await db.from('samples').insert({lead_id:currentLead.id,products:prod,sent_date:$('sa-date').value||null,feedback:$('sa-fb').value.trim(),converted:$('sa-conv').value==='true'});
+  loadLeadAmostras();
+}
+
+// ─── EMAIL IA ─────────────────────────────────────────────────────────────────
 async function genEmail(){
-  if(!apiKey){alert('Configura a API key nas definições.');return;}
-  const l=currentLead;
-  const ctx=$('email-ctx').value.trim();
-  const btn=$('btn-gen-email');
+  if(!apiKey){alert('Configura a API key nas Definicoes.');return;}
+  var l=currentLead;
+  var ctx=$('email-ctx').value.trim();
+  var btn=$('btn-gen-email');
   btn.textContent='A gerar...'; btn.disabled=true;
-  const prompt=`És assistente comercial da Alitec (Frutta Nature), empresa portuguesa de produtos alimentares.
-Lead: ${l.company} | ${mktL[l.market]||l.market} | ${l.product||'produtos Alitec'} | Fase: ${stageL[l.stage]}
-Notas: ${l.notes||'—'}
-${ctx?`Contexto: ${ctx}`:''}
-Gera um email de follow-up. Tom direto e profissional. Português europeu. Inclui assunto. Assina como Samuel Constantino, Alitec.`;
+  var prompt='Assistente comercial da Alitec (Frutta Nature).\nLead: '+l.company+' | '+(mktL[l.market]||l.market)+' | '+(l.product||'produtos Alitec')+' | Fase: '+(stageL[l.stage]||l.stage)+'\nNotas: '+(l.notes||'--')+'\n'+(ctx?'Contexto: '+ctx+'\n':'')+'\nGera email de follow-up. Tom direto e profissional. Portugues europeu. Inclui assunto. Assina como Samuel Constantino, Alitec.';
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:800,messages:[{role:'user',content:prompt}]})});
-    const d=await res.json();
-    $('email-result').value=d.content?.[0]?.text||'Erro';
+    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:800,messages:[{role:'user',content:prompt}]})});
+    var d=await res.json();
+    $('email-result').value=d.content&&d.content[0]?d.content[0].text:'Erro';
     $('email-result-wrap').style.display='block';
-  }catch(e){alert('Erro: '+e.message);}
+  } catch(e){alert('Erro: '+e.message);}
   btn.textContent='Gerar email'; btn.disabled=false;
 }
 
 async function refineEmail(){
-  const inst=$('email-refine').value.trim();
-  const curr=$('email-result').value;
-  const l=currentLead;
-  const prompt=`Email anterior:\n${curr}\nRefinamento: ${inst||'melhora'}`;
-  const btn=document.getElementById('btn-gen-email');
+  var inst=$('email-refine').value.trim();
+  var curr=$('email-result').value;
+  var prompt='Email anterior:\n'+curr+'\nRefinamento: '+(inst||'melhora');
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:800,messages:[{role:'user',content:prompt}]})});
-    const d=await res.json();
-    $('email-result').value=d.content?.[0]?.text||'Erro';
+    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:800,messages:[{role:'user',content:prompt}]})});
+    var d=await res.json();
+    $('email-result').value=d.content&&d.content[0]?d.content[0].text:'Erro';
     $('email-refine').value='';
-  }catch(e){alert('Erro: '+e.message);}
+  } catch(e){alert('Erro: '+e.message);}
 }
 
 function copyEmail(){
-  const txt=$('email-result').value;
+  var txt=$('email-result').value;
   if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(txt).then(()=>{ const b=document.getElementById('btn-gen-email'); })
-    .catch(()=>{ $('email-result').select(); document.execCommand('copy'); });
+    navigator.clipboard.writeText(txt).catch(function(){ $('email-result').select(); document.execCommand('copy'); });
   } else { $('email-result').select(); document.execCommand('copy'); }
+}
+
+// ─── LEAD MODAL TABS ──────────────────────────────────────────────────────────
+function switchSTab(modal,name,btnEl){
+  document.querySelectorAll('#modal-'+modal+' .stab').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('#modal-'+modal+' .stab-pane').forEach(function(p){p.classList.remove('active');});
+  btnEl.classList.add('active');
+  $(( modal==='lead'?'ltab':'ftab')+'-'+name).classList.add('active');
+  if(modal==='lead'&&name==='contactos') loadLeadContactos();
+  if(modal==='lead'&&name==='historico') loadLeadHistorico();
+  if(modal==='lead'&&name==='amostras') loadLeadAmostras();
+  if(modal==='frente'&&name==='tarefas') loadFrenteTarefas();
+  if(modal==='frente'&&name==='updates') loadFrenteUpdates();
 }
 
 // ─── FRENTES ──────────────────────────────────────────────────────────────────
 async function loadFrente(){
-  const{data}=await db.from('frentes').select('*').order('ordem');
-  frentes=data||[];
-  const{data:tarefas}=await db.from('tarefas').select('frente_id').eq('estado','aberta');
-  const counts={};
-  (tarefas||[]).forEach(t=>{ counts[t.frente_id]=(counts[t.frente_id]||0)+1; });
-  const total=Object.values(counts).reduce((a,b)=>a+b,0);
-  [$('sdb-tarefas'),$('bnb-tarefas')].forEach(b=>{if(b){b.textContent=total;b.style.display=total?'':'none';}});
-
-  const el=$('frentes-list');
-  el.innerHTML=frentes.map((f,i)=>`
-  ${i>0?'<div class="row-sep"></div>':''}
-  <div class="frente-card" onclick="openFrente(${f.id})">
-    <div class="frente-row">
-      <div class="frente-icon-wrap">${f.icone||'📌'}</div>
-      <div class="frente-info">
-        <div class="frente-name">${f.nome}</div>
-        <div class="frente-estado">${f.estado||'Sem estado registado'}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        ${counts[f.id]?`<span class="badge badge-overdue">${counts[f.id]}</span>`:''}
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
-      </div>
-    </div>
-  </div>`).join('');
+  var resp=await db.from('frentes').select('*').order('ordem');
+  frentes=resp.data||[];
+  var tresp=await db.from('tarefas').select('frente_id').eq('estado','aberta');
+  var counts={};
+  (tresp.data||[]).forEach(function(t){ counts[t.frente_id]=(counts[t.frente_id]||0)+1; });
+  var total=Object.values(counts).reduce(function(a,b){return a+b;},0);
+  [$('sdb-tarefas'),$('bnb-tarefas')].forEach(function(b){if(b){b.textContent=total;b.style.display=total?'':'none';}});
+  var html='';
+  frentes.forEach(function(f,i){
+    if(i>0) html+='<div class="sep"></div>';
+    html+='<div class="frente-card" onclick="openFrente('+f.id+')">';
+    html+='<div class="frente-row">';
+    html+='<div class="frente-icon-wrap">'+(f.icone||'📌')+'</div>';
+    html+='<div class="frente-info"><div class="frente-name">'+h(f.nome)+'</div><div class="frente-estado">'+(f.estado?h(f.estado):'Sem estado registado')+'</div></div>';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-left:auto;">';
+    if(counts[f.id]) html+='<span class="badge b-overdue">'+counts[f.id]+'</span>';
+    html+='<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>';
+    html+='</div></div>';
+  });
+  $('frentes-list').innerHTML=html||'<div class="empty-state"><div class="empty-text">Sem frentes</div></div>';
 }
 
 async function openFrente(id){
-  currentFrente=frentes.find(f=>f.id===id);
+  currentFrente=frentes.find(function(f){return f.id===id;});
   if(!currentFrente) return;
-  $('mf-title').textContent=currentFrente.icone+' '+currentFrente.nome;
+  $('mf-title').textContent=(currentFrente.icone||'')+' '+currentFrente.nome;
   $('mf-estado').value=currentFrente.estado||'';
-  document.querySelectorAll('#modal-frente .mtab').forEach((t,i)=>t.classList.toggle('active',i===0));
-  document.querySelectorAll('#modal-frente .mtab-pane').forEach((p,i)=>p.classList.toggle('active',i===0));
+  document.querySelectorAll('#modal-frente .stab').forEach(function(t,i){t.classList.toggle('active',i===0);});
+  document.querySelectorAll('#modal-frente .stab-pane').forEach(function(p,i){p.classList.toggle('active',i===0);});
   await loadFrenteTarefas();
   openModal('modal-frente');
 }
 
 async function saveFrenteEstado(){
   if(!currentFrente) return;
-  const estado=$('mf-estado').value.trim();
-  await db.from('frentes').update({estado,updated_at:new Date().toISOString()}).eq('id',currentFrente.id);
+  var estado=$('mf-estado').value.trim();
+  await db.from('frentes').update({estado:estado,updated_at:new Date().toISOString()}).eq('id',currentFrente.id);
   currentFrente.estado=estado;
-  const f=frentes.find(f=>f.id===currentFrente.id); if(f) f.estado=estado;
+  var f=frentes.find(function(f){return f.id===currentFrente.id;}); if(f) f.estado=estado;
   loadFrente();
 }
 
 async function loadFrenteTarefas(){
-  const{data}=await db.from('tarefas').select('*').eq('frente_id',currentFrente.id).order('created_at',{ascending:false});
-  const abertas=(data||[]).filter(t=>t.estado==='aberta');
-  const fechadas=(data||[]).filter(t=>t.estado!=='aberta');
-  $('ftab-tarefas').innerHTML=`
-  <div style="padding:4px 20px 16px;">
-    <button onclick="openAddTarefa(currentFrente?.id)" class="btn btn-secondary btn-sm" style="margin-bottom:12px;width:100%;">+ Nova tarefa</button>
-    ${abertas.map(t=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--sep);">
-      <button onclick="closeTarefa(${t.id})" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--sep);background:none;cursor:pointer;flex-shrink:0;margin-top:1px;"></button>
-      <div style="flex:1;">
-        <div style="font-size:15px;${t.prioridade==='alta'?'font-weight:600;':''}">${t.prioridade==='alta'?'⚠ ':''}${t.texto}</div>
-        ${t.data_limite?`<div style="font-size:12px;color:var(--text3);margin-top:2px;">Limite: ${t.data_limite}</div>`:''}
-      </div>
-      <button onclick="deleteTarefa(${t.id})" style="border:none;background:none;color:var(--text3);cursor:pointer;font-size:16px;">✕</button>
-    </div>`).join('')}
-    ${abertas.length===0?'<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem tarefas abertas.</div>':''}
-    ${fechadas.length>0?`<div style="font-size:12px;color:var(--text3);margin-top:12px;margin-bottom:4px;">CONCLUÍDAS (${fechadas.length})</div>${fechadas.slice(0,5).map(t=>`<div style="font-size:14px;text-decoration:line-through;color:var(--text3);padding:6px 0;">${t.texto}</div>`).join('')}`:''}
-  </div>`;
+  if(!currentFrente) return;
+  var resp=await db.from('tarefas').select('*').eq('frente_id',currentFrente.id).order('created_at',{ascending:false});
+  var data=resp.data||[];
+  var abertas=data.filter(function(t){return t.estado==='aberta';});
+  var fechadas=data.filter(function(t){return t.estado!=='aberta';});
+  var html='<div style="padding:4px 20px 16px;">';
+  html+='<button onclick="openAddTarefa('+currentFrente.id+')" class="btn btn-secondary btn-sm btn-full" style="margin-bottom:12px;">+ Nova tarefa</button>';
+  abertas.forEach(function(t){
+    var lim=t.data_limite?('<div style="font-size:12px;color:var(--text3);margin-top:2px;">Limite: '+t.data_limite+'</div>'):'';
+    var bold=t.prioridade==='alta'?'font-weight:600;':'';
+    var prio=t.prioridade==='alta'?'! ':'';
+    html+='<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<button onclick="closeTarefa('+t.id+')" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border-med);background:none;cursor:pointer;flex-shrink:0;margin-top:2px;"></button>';
+    html+='<div style="flex:1;"><div style="font-size:15px;'+bold+'">'+prio+h(t.texto)+'</div>'+lim+'</div>';
+    html+='<button onclick="deleteTarefa('+t.id+')" style="border:none;background:none;color:var(--text3);cursor:pointer;font-size:16px;padding:0 4px;">x</button>';
+    html+='</div>';
+  });
+  if(!abertas.length) html+='<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem tarefas abertas.</div>';
+  if(fechadas.length){
+    html+='<div style="font-size:12px;color:var(--text4);margin-top:12px;margin-bottom:4px;">CONCLUIDAS ('+fechadas.length+')</div>';
+    fechadas.slice(0,5).forEach(function(t){
+      html+='<div style="font-size:14px;text-decoration:line-through;color:var(--text4);padding:6px 0;">'+h(t.texto)+'</div>';
+    });
+  }
+  html+='</div>';
+  $('ftab-tarefas').innerHTML=html;
 }
 
 async function closeTarefa(id){
@@ -1273,105 +1311,83 @@ async function deleteTarefa(id){
   loadFrenteTarefas(); loadFrente();
 }
 
-async function addTarefa(){
-  const texto=$('nt-texto').value.trim(); if(!texto||!currentFrente) return;
-  await db.from('tarefas').insert({frente_id:currentFrente.id,texto,prioridade:$('nt-prio').value,data_limite:$('nt-data').value||null,estado:'aberta'});
+function openAddTarefa(frenteId){
+  var sel=$('nt-frente');
+  sel.innerHTML=frentes.map(function(f){return '<option value="'+f.id+'"'+(f.id===frenteId?' selected':'')+'>'+f.icone+' '+f.nome+'</option>';}).join('');
+  $('nt-texto').value=''; $('nt-data').value=''; $('nt-prio').value='normal';
+  openModal('modal-add-tarefa');
+}
+
+async function addTarefaGlobal(){
+  var texto=$('nt-texto').value.trim();
+  var fid=parseInt($('nt-frente').value);
+  if(!texto||!fid) return;
+  await db.from('tarefas').insert({frente_id:fid,texto:texto,prioridade:$('nt-prio').value,data_limite:$('nt-data').value||null,estado:'aberta'});
   $('nt-texto').value=''; $('nt-data').value='';
   closeModal('modal-add-tarefa');
-  loadFrenteTarefas(); loadFrente();
+  if(currentFrente&&currentFrente.id===fid) loadFrenteTarefas();
+  loadFrente();
 }
 
 async function loadFrenteUpdates(){
-  const{data}=await db.from('frente_updates').select('*').eq('frente_id',currentFrente.id).order('created_at',{ascending:false});
-  $('ftab-updates').innerHTML=`
-  <div style="padding:4px 20px 16px;">
-    <div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:12px;">
-      <textarea class="form-textarea" id="fu-texto" placeholder="o que aconteceu, decisão tomada..." style="height:60px;margin-bottom:8px;"></textarea>
-      <button class="btn btn-primary btn-sm" onclick="addFrenteUpdate()">Guardar update</button>
-    </div>
-    ${(data||[]).map(u=>`<div style="padding:10px 0;border-bottom:1px solid var(--sep);">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:4px;">${new Date(u.created_at).toLocaleDateString('pt-PT',{day:'numeric',month:'long',year:'numeric'})}</div>
-      <div style="font-size:15px;line-height:1.5;">${u.texto}</div>
-    </div>`).join('')}
-    ${(data||[]).length===0?'<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem updates registados.</div>':''}
-  </div>`;
+  if(!currentFrente) return;
+  var resp=await db.from('frente_updates').select('*').eq('frente_id',currentFrente.id).order('created_at',{ascending:false});
+  var data=resp.data||[];
+  var html='<div style="padding:4px 20px 16px;">';
+  html+='<div style="background:var(--bg2);border-radius:10px;padding:12px;margin-bottom:12px;">';
+  html+='<textarea class="form-textarea" id="fu-texto" placeholder="o que aconteceu, decisao tomada..." style="height:60px;margin-bottom:8px;"></textarea>';
+  html+='<button class="btn btn-primary btn-sm" onclick="addFrenteUpdate()">Guardar update</button></div>';
+  data.forEach(function(u){
+    var dt=new Date(u.created_at).toLocaleDateString('pt-PT',{day:'numeric',month:'long',year:'numeric'});
+    html+='<div style="padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<div style="font-size:12px;color:var(--text3);margin-bottom:4px;">'+dt+'</div>';
+    html+='<div style="font-size:15px;line-height:1.5;">'+h(u.texto)+'</div></div>';
+  });
+  if(!data.length) html+='<div style="color:var(--text3);font-size:14px;padding:8px 0;">Sem updates.</div>';
+  html+='</div>';
+  $('ftab-updates').innerHTML=html;
 }
 
 async function addFrenteUpdate(){
-  const texto=$('fu-texto').value.trim(); if(!texto||!currentFrente) return;
-  await db.from('frente_updates').insert({frente_id:currentFrente.id,texto});
+  var texto=$('fu-texto').value.trim(); if(!texto||!currentFrente) return;
+  await db.from('frente_updates').insert({frente_id:currentFrente.id,texto:texto});
   loadFrenteUpdates();
 }
 
-// ─── MODAL TABS ───────────────────────────────────────────────────────────────
-function switchSTab(modal,name,el){ switchMTab(modal,name,el); }
-function switchMTab(modal,name,el){
-  const prefix = modal==='lead'?'ltab':'ftab';
-  document.querySelectorAll(`#modal-${modal} .stab`).forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll(`#modal-${modal} .stab-pane`).forEach(p=>p.classList.remove('active'));
-  el.classList.add('active');
-  $(prefix+'-'+name).classList.add('active');
-  if(modal==='lead'&&name==='contactos') loadLeadContactos();
-  if(modal==='lead'&&name==='amostras') loadLeadAmostras();
-  if(modal==='lead'&&name==='historico') loadLeadHistorico();
-  if(modal==='frente'&&name==='tarefas') loadFrenteTarefas();
-  if(modal==='frente'&&name==='updates') loadFrenteUpdates();
-}
-
-
-async function loadLeadAmostras(){
-  const{data}=await db.from('samples').select('*').eq('lead_id',currentLead.id).order('sent_date',{ascending:false});
-  const c=$('ltab-amostras');
-  const rows=(data||[]).map(x=>`
-  <div class="history-item">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <span style="font-size:15px;font-weight:600;">${x.products}</span>
-      <span class="badge ${x.converted?'b-ganho':'b-contactado'}">${x.converted?'Converteu':'Pendente'}</span>
-    </div>
-    <div class="history-date">${x.sent_date||'—'}</div>
-    ${x.feedback?`<div class="history-text" style="margin-top:6px;">${x.feedback}</div>`:''}
-  </div>`).join('');
-  c.innerHTML=`<div>${rows||'<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Sem amostras</div></div>'}
-  <div style="padding:12px 16px;">
-    <div class="form-field"><label class="form-label">Produto(s)</label><input class="form-input" id="sa-prod" placeholder="ex: Farinha BD 35mesh 500g"/></div>
-    <div class="form-row"><div class="form-field"><label class="form-label">Data envio</label><input type="date" class="form-input" id="sa-date"/></div><div class="form-field"><label class="form-label">Estado</label><select class="form-select" id="sa-conv"><option value="false">Pendente</option><option value="true">Converteu</option></select></div></div>
-    <div class="form-field"><label class="form-label">Feedback</label><textarea class="form-textarea" id="sa-fb" style="height:60px;" placeholder="reação do cliente..."></textarea></div>
-    <button class="btn btn-secondary btn-sm btn-full" onclick="addAmostra()">Registar amostra</button>
-  </div></div>`;
-}
-async function addAmostra(){
-  const prod=$('sa-prod').value.trim(); if(!prod) return;
-  await db.from('samples').insert({lead_id:currentLead.id,products:prod,sent_date:$('sa-date').value||null,feedback:$('sa-fb').value.trim(),converted:$('sa-conv').value==='true'});
-  loadLeadAmostras();
-}
 // ─── PRODUTOS ─────────────────────────────────────────────────────────────────
 async function loadProdutos(){
-  const{data}=await db.from('products').select('*').order('name');
-  products=data||[];
-  const el=$('produtos-list');
-  if(!products.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Sem produtos no catálogo</div></div>';return;}
-  el.innerHTML=products.map((p,i)=>{
-    const m=p.price_base&&p.cost?Math.round((p.price_base-p.cost)/p.price_base*100):null;
-    const mc=m===null?'color:var(--text3)':m>=40?'color:var(--green)':m>=25?'color:var(--orange)':'color:var(--red)';
-    return `${i>0?'<div class="row-sep"></div>':''}<div class="product-card">
-      <div class="product-name">${p.name}</div>
-      <div class="product-detail">${[p.reference,p.packaging].filter(Boolean).join(' · ')}</div>
-      ${p.price_base!=null?`<div class="product-price">${p.price_base.toFixed(2)} €/kg${m!==null?`<span style="font-size:13px;margin-left:8px;${mc}">Margem ${m}%</span>`:''}</div>`:''}
-      ${p.specs?`<div style="font-size:13px;color:var(--text3);margin-top:4px;line-height:1.4;">${p.specs}</div>`:''}
-    </div>`;
-  }).join('');
+  var resp=await db.from('products').select('*').order('name');
+  products=resp.data||[];
+  var el=$('produtos-list');
+  if(!products.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Sem produtos no catalogo</div></div>';return;}
+  var html='';
+  products.forEach(function(p,i){
+    var m=p.price_base&&p.cost?Math.round((p.price_base-p.cost)/p.price_base*100):null;
+    var mc=m===null?'color:var(--text3)':m>=40?'color:var(--green)':m>=25?'color:var(--orange)':'color:var(--red)';
+    if(i>0) html+='<div class="sep"></div>';
+    html+='<div class="product-card">';
+    html+='<div class="product-name">'+h(p.name)+'</div>';
+    html+='<div class="product-detail">'+h([p.reference,p.packaging].filter(Boolean).join(' / '))+'</div>';
+    if(p.price_base!=null) html+='<div class="product-price">'+p.price_base.toFixed(2)+' /kg'+(m!==null?'<span style="font-size:13px;margin-left:8px;'+mc+'">Margem '+m+'%</span>':'')+'</div>';
+    if(p.specs) html+='<div style="font-size:13px;color:var(--text3);margin-top:4px;line-height:1.4;">'+h(p.specs)+'</div>';
+    html+='</div>';
+  });
+  el.innerHTML=html;
 }
 
 // ─── MODALS ───────────────────────────────────────────────────────────────────
 function openModal(id){ $(id).classList.add('open'); }
 function closeModal(id){ $(id).classList.remove('open'); }
-document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id);}));
+document.querySelectorAll('.overlay').forEach(function(m){
+  m.addEventListener('click',function(e){if(e.target===m)closeModal(m.id);});
+});
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
 function openSettings(){
   $('s-apikey').value=apiKey;
   openModal('modal-settings');
 }
+
 async function saveSettings(){
   apiKey=$('s-apikey').value.trim();
   localStorage.setItem('alitec-apikey',apiKey);
@@ -1379,25 +1395,21 @@ async function saveSettings(){
     {key:'briefing_weekday',value:$('s-briefing-week').value},
     {key:'briefing_saturday',value:$('s-briefing-sat').value},
     {key:'briefing_sunday',value:$('s-briefing-sun').value},
-    {key:'anthropic_key',value:apiKey},
+    {key:'anthropic_key',value:apiKey}
   ],{onConflict:'key'});
   closeModal('modal-settings');
+  var btn=$('btn-save-settings');
+  if(btn){var orig=btn.textContent;btn.textContent='Guardado';setTimeout(function(){btn.textContent=orig;},2000);}
   if(apiKey) loadBriefing();
-  const btn=$('btn-save-settings');
-  if(btn){ const orig=btn.textContent; btn.textContent='✓ Guardado'; setTimeout(()=>{btn.textContent=orig;},2000); }
 }
 
 async function loadSettings(){
-  const{data}=await db.from('settings').select('*');
-  const m={};(data||[]).forEach(r=>m[r.key]=r.value);
+  var resp=await db.from('settings').select('*');
+  var m={};(resp.data||[]).forEach(function(r){m[r.key]=r.value;});
   if(m.briefing_weekday) $('s-briefing-week').value=m.briefing_weekday;
   if(m.briefing_saturday) $('s-briefing-sat').value=m.briefing_saturday;
   if(m.briefing_sunday) $('s-briefing-sun').value=m.briefing_sunday;
-  // Load API key from DB if not in localStorage
-  if(!apiKey && m.anthropic_key) {
-    apiKey = m.anthropic_key;
-    localStorage.setItem('alitec-apikey', apiKey);
-  }
+  if(!apiKey&&m.anthropic_key){apiKey=m.anthropic_key;localStorage.setItem('alitec-apikey',apiKey);}
 }
 
 // ─── PWA ──────────────────────────────────────────────────────────────────────
@@ -1409,12 +1421,12 @@ if('serviceWorker' in navigator){
 async function init(){
   apiKey=localStorage.getItem('alitec-apikey')||'';
   setGreeting();
-  await loadSettings(); // may update apiKey from Supabase
-  await Promise.all([loadLeads(), loadFrente()]);
-  await loadBriefing(); // called after loadSettings so apiKey is fresh
-  // fab hidden by default via CSS display:none
+  await loadSettings();
+  await Promise.all([loadLeads(),loadFrente()]);
+  await loadBriefing();
 }
 init();
+
 </script>
 </body>
 </html>
